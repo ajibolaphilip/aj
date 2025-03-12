@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>CHF/JPY Trading Signals</title>
+  <title>CHF/JPY Trading Signal</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -20,141 +20,103 @@
       font-weight: bold;
       margin-top: 20px;
     }
-    .buy { color: green; }
-    .sell { color: red; }
-    .no-entry { color: gray; }
-    .loading { color: #555; }
-    .pair-price {
+    .buy {
+      color: green;
+    }
+    .sell {
+      color: red;
+    }
+    .no-entry {
+      color: gray;
+    }
+    .loading {
+      color: #555;
+    }
+    .price-info {
       margin-top: 20px;
+      font-size: 1.2em;
       font-weight: bold;
     }
   </style>
-  <!-- Load technical indicators library from CDN -->
-  <script src="https://unpkg.com/technicalindicators@3.1.0/dist/browser/technicalindicators.js"></script>
 </head>
 <body>
-  <h1>CHF/JPY Signal (3 Indicators)</h1>
+  <h1>CHF/JPY Trading Signal</h1>
   <div class="signal loading" id="signal">Loading...</div>
-  <div class="pair-price" id="pair-price">CHF/JPY: --</div>
+  <div class="price-info" id="price">CHF/JPY: --</div>
 
   <script>
-    // ========================================
-    // CONFIGURATION
-    // ========================================
-    const API_KEY = 'ac495344588e48168833eccf2a40efdb'; // Your Twelve Data API key
+    const API_KEY = 'ac495344588e48168833eccf2a40efdb'; // Replace with your real API key
     const REFRESH_INTERVAL = 300_000; // 5 minutes
-    const OUTPUT_SIZE = 30; // number of 5-minute bars
-    const INTERVAL = '5min'; // using 5-minute candles for reduced noise
 
-    // ========================================
-    // HELPER FUNCTION: Fetch time series data for CHF/JPY
-    // ========================================
-    async function fetchTimeSeries(symbol) {
-      const url = `https://api.twelvedata.com/time_series?symbol=${symbol}&interval=${INTERVAL}&outputsize=${OUTPUT_SIZE}&apikey=${API_KEY}`;
+    async function fetchMarketData(symbol) {
       try {
-        const response = await fetch(url);
+        const response = await fetch(`https://api.twelvedata.com/time_series?symbol=${symbol}&interval=5min&apikey=${API_KEY}&outputsize=14`);
         const data = await response.json();
-        if (data && data.values) {
-          // Reverse so the oldest candle is first
-          return data.values.reverse();
-        } else {
-          console.error('Time series error:', data);
+        if (!data || !data.values) {
+          console.error("Error fetching data:", data);
           return null;
         }
+        return data.values; // Returns an array of price data
       } catch (error) {
-        console.error('Fetch error:', error);
+        console.error("API Fetch Error:", error);
         return null;
       }
     }
 
-    // ========================================
-    // HELPER FUNCTION: Calculate indicators (RSI, MACD, Bollinger Bands)
-    // ========================================
-    function calculateIndicators(candles) {
-      const closes = candles.map(c => parseFloat(c.close));
-
-      // RSI(14)
-      const rsiValues = technicalindicators.RSI.calculate({
-        period: 14,
-        values: closes
-      });
-      const latestRSI = rsiValues[rsiValues.length - 1];
-
-      // MACD (12, 26, 9)
-      const macdValues = technicalindicators.MACD.calculate({
-        fastPeriod: 12,
-        slowPeriod: 26,
-        signalPeriod: 9,
-        SimpleMAOscillator: false,
-        SimpleMASignal: false,
-        values: closes
-      });
-      const latestMACD = macdValues[macdValues.length - 1];
-
-      // Bollinger Bands (period=20, stdDev=2)
-      const bbValues = technicalindicators.BollingerBands.calculate({
-        period: 20,
-        values: closes,
-        stdDev: 2
-      });
-      const latestBB = bbValues[bbValues.length - 1];
-
-      return { latestRSI, latestMACD, latestBB };
+    function calculateRSI(prices, period = 14) {
+      let gains = 0, losses = 0;
+      for (let i = 1; i < period; i++) {
+        let change = prices[i - 1] - prices[i];
+        if (change > 0) {
+          gains += change;
+        } else {
+          losses -= change;
+        }
+      }
+      if (losses === 0) return 100; // Strong buy signal
+      let RS = gains / losses;
+      return 100 - (100 / (1 + RS));
     }
 
-    // ========================================
-    // HELPER FUNCTION: Voting system for signal
-    // ========================================
-    function determineSignal(indicators, currentPrice) {
-      let votes = { buy: 0, sell: 0 };
-
-      // RSI vote: Buy if RSI < 30, Sell if RSI > 70
-      if (indicators.latestRSI < 30) votes.buy++;
-      else if (indicators.latestRSI > 70) votes.sell++;
-
-      // MACD vote: Buy if MACD > signal, Sell if MACD < signal
-      if (indicators.latestMACD.MACD > indicators.latestMACD.signal) votes.buy++;
-      else votes.sell++;
-
-      // Bollinger Bands vote: Buy if current price is below lower band, Sell if above upper band
-      if (currentPrice < indicators.latestBB.lower) votes.buy++;
-      else if (currentPrice > indicators.latestBB.upper) votes.sell++;
-
-      // Final decision: require at least 2 votes to act
-      if (votes.buy >= 2 && votes.buy > votes.sell) return 'Buy';
-      if (votes.sell >= 2 && votes.sell > votes.buy) return 'Sell';
-      return 'No Entry';
+    function calculateMovingAverage(prices, period) {
+      let sum = prices.slice(0, period).reduce((a, b) => a + b, 0);
+      return sum / period;
     }
 
-    // ========================================
-    // MAIN LOGIC: Update signal based on 3 indicators
-    // ========================================
     async function updateSignal() {
       const signalElement = document.getElementById('signal');
-      const priceElement = document.getElementById('pair-price');
+      const priceElement = document.getElementById('price');
 
       signalElement.className = 'signal loading';
       signalElement.textContent = 'Loading...';
 
-      // Fetch candlestick data for CHF/JPY
-      const candles = await fetchTimeSeries('CHF/JPY');
-      if (!candles) {
+      const marketData = await fetchMarketData('CHF/JPY');
+
+      if (!marketData) {
         signalElement.className = 'signal no-entry';
-        signalElement.textContent = 'No Entry';
+        signalElement.textContent = 'No Entry (API Error)';
         return;
       }
 
-      // Current price is the last candle's close
-      const currentPrice = parseFloat(candles[candles.length - 1].close);
+      const prices = marketData.map(data => parseFloat(data.close));
+
+      if (prices.length < 14) {
+        signalElement.className = 'signal no-entry';
+        signalElement.textContent = 'No Entry (Not Enough Data)';
+        return;
+      }
+
+      const currentPrice = prices[0];
+      const shortMA = calculateMovingAverage(prices, 5);
+      const longMA = calculateMovingAverage(prices, 14);
+      const rsi = calculateRSI(prices, 14);
+
       priceElement.textContent = `CHF/JPY: ${currentPrice.toFixed(3)}`;
 
-      const indicators = calculateIndicators(candles);
-      const finalSignal = determineSignal(indicators, currentPrice);
-
-      if (finalSignal === 'Buy') {
+      if (shortMA > longMA && rsi < 30) {
         signalElement.className = 'signal buy';
         signalElement.textContent = 'Buy';
-      } else if (finalSignal === 'Sell') {
+      } else if (shortMA < longMA && rsi > 70) {
         signalElement.className = 'signal sell';
         signalElement.textContent = 'Sell';
       } else {
@@ -163,9 +125,7 @@
       }
     }
 
-    // Run on page load
     updateSignal();
-    // Refresh at defined interval
     setInterval(updateSignal, REFRESH_INTERVAL);
   </script>
 </body>
