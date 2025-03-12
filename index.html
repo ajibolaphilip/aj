@@ -47,8 +47,7 @@
     <p id="time">Last Update: --</p>
 
     <script>
-        let buyCount = 0;
-        let sellCount = 0;
+        let priceHistory = []; // Store last 36 price updates (3 minutes)
         const requiredUpdates = 36; // 36 updates = 3 minutes
 
         function fetchLivePrice() {
@@ -61,30 +60,29 @@
             let signalElement = document.getElementById('signal');
             let strongSignalElement = document.getElementById('strong-signal');
 
-            let { signal } = determineSignal(price);
+            // Add price to history and keep only the last 36 values
+            priceHistory.push(parseFloat(price));
+            if (priceHistory.length > requiredUpdates) {
+                priceHistory.shift();
+            }
+
+            let { signal, strongSignal } = determineSignal(priceHistory);
 
             if (signal === "Buy") {
                 signalElement.innerText = "BUY";
                 signalElement.className = "buy";
-                buyCount++;
-                sellCount = 0; // Reset sell counter if trend changes
             } else if (signal === "Sell") {
                 signalElement.innerText = "SELL";
                 signalElement.className = "sell";
-                sellCount++;
-                buyCount = 0; // Reset buy counter if trend changes
             } else {
                 signalElement.innerText = "No Entry";
                 signalElement.className = "no-entry";
-                buyCount = 0;
-                sellCount = 0;
             }
 
-            // Show Strong Buy/Sell only if trend continues for 3 minutes
-            if (buyCount >= requiredUpdates) {
+            if (strongSignal === "Strong Buy") {
                 strongSignalElement.innerText = "Strong Buy";
                 strongSignalElement.className = "strong-buy";
-            } else if (sellCount >= requiredUpdates) {
+            } else if (strongSignal === "Strong Sell") {
                 strongSignalElement.innerText = "Strong Sell";
                 strongSignalElement.className = "strong-sell";
             } else {
@@ -92,17 +90,31 @@
             }
         }
 
-        function determineSignal(price) {
-            price = parseFloat(price);
-            let signal = "No Entry";
-
-            if (price > 168.1) {
-                signal = "Buy";
-            } else if (price < 167.9) {
-                signal = "Sell";
+        function determineSignal(priceHistory) {
+            if (priceHistory.length < requiredUpdates) {
+                return { signal: "No Entry", strongSignal: "" };
             }
 
-            return { signal };
+            let latestPrice = priceHistory[priceHistory.length - 1];
+            let oldestPrice = priceHistory[0];
+            let trendDirection = latestPrice - oldestPrice; // Check if price is increasing or decreasing
+
+            let signal = "No Entry";
+            let strongSignal = "";
+
+            if (latestPrice > 168.1) {
+                signal = "Buy";
+                if (trendDirection > 0.15) { // Check if trend is moving UP strongly
+                    strongSignal = "Strong Buy";
+                }
+            } else if (latestPrice < 167.9) {
+                signal = "Sell";
+                if (trendDirection < -0.15) { // Check if trend is moving DOWN strongly
+                    strongSignal = "Strong Sell";
+                }
+            }
+
+            return { signal, strongSignal };
         }
 
         // Fetch data every 5 seconds
