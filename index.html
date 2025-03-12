@@ -50,8 +50,23 @@
     <script>
         const API_KEY = "ac495344588e48168833eccf2a40efdb"; // Your Twelve Data API Key
         const SYMBOL = "CHF/JPY";
-        const INTERVAL = "1min";  // Fetch data every 1 minute
-        const REFRESH_INTERVAL = 60000; // Refresh every 1 minute
+        const INTERVAL = "1min";
+        const PRICE_REFRESH_INTERVAL = 1000; // Price updates every second
+        const SIGNAL_REFRESH_INTERVAL = 60000; // Signal updates every minute
+
+        async function fetchLivePrice() {
+            try {
+                const url = `https://api.twelvedata.com/price?symbol=${SYMBOL}&apikey=${API_KEY}`;
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (data && data.price) {
+                    document.getElementById('price').innerText = `CHF/JPY: ${parseFloat(data.price).toFixed(3)}`;
+                }
+            } catch (error) {
+                console.error("Price fetch error:", error);
+            }
+        }
 
         async function fetchIndicators() {
             try {
@@ -65,8 +80,8 @@
 
                     return {
                         current: candles[0],
-                        previous1: candles[1],  // 1 min ago
-                        previous2: candles[2]   // 2 min ago
+                        previous1: candles[1],  
+                        previous2: candles[2]   
                     };
                 }
             } catch (error) {
@@ -85,13 +100,13 @@
 
                 return {
                     price: parseFloat(data.close),
-                    rsi: parseFloat(data.rsi),  // Relative Strength Index
-                    macd: parseFloat(data.macd), // MACD
-                    stochastic: parseFloat(data.stochastic_k), // Stochastic
+                    rsi: parseFloat(data.rsi),
+                    macd: parseFloat(data.macd),
+                    stochastic: parseFloat(data.stochastic_k),
                     bollinger: parseFloat(data.bollinger_lower) < data.close && data.close < parseFloat(data.bollinger_upper),
                     volume: parseFloat(data.volume),
-                    support: parseFloat(data.support),  // Support Level
-                    resistance: parseFloat(data.resistance)  // Resistance Level
+                    support: parseFloat(data.support),
+                    resistance: parseFloat(data.resistance)
                 };
             } catch (error) {
                 console.error("API fetch error:", error);
@@ -109,14 +124,12 @@
             }
 
             const { current, previous1, previous2 } = indicatorData;
-            document.getElementById('price').innerText = `CHF/JPY: ${current.toFixed(3)}`;
             document.getElementById('entry-2min').innerText = `2-Min Entry: ${previous2.toFixed(3)}`;
             document.getElementById('time').innerText = `Last Update: ${new Date().toLocaleTimeString()}`;
 
             let signal = "No Entry";
             let strongSignal = "";
 
-            // 7-indicator confirmation
             let buyConditions = (
                 techData.rsi > 50 &&
                 techData.macd > 0 &&
@@ -138,7 +151,7 @@
             if (buyConditions) {
                 signal = "Buy";
                 if (current > previous2 * 1.0015) {
-                    strongSignal = "Strong Buy"; // Ensures trend continuation for 1-2 minutes
+                    strongSignal = "Strong Buy";
                 }
             } else if (sellConditions) {
                 signal = "Sell";
@@ -172,8 +185,15 @@
             }
         }
 
+        function updateLiveTime() {
+            document.getElementById('time').innerText = `Live Time: ${new Date().toLocaleTimeString()}`;
+        }
+
+        fetchLivePrice();
+        setInterval(fetchLivePrice, PRICE_REFRESH_INTERVAL);
         updateSignal();
-        setInterval(updateSignal, REFRESH_INTERVAL);
+        setInterval(updateSignal, SIGNAL_REFRESH_INTERVAL);
+        setInterval(updateLiveTime, 1000); // Update live time every second
     </script>
 </body>
 </html>
