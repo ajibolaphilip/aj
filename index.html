@@ -47,70 +47,63 @@
     <p id="time">Last Update: --</p>
 
     <script>
-        async function fetchLiveData() {
-            try {
-                // Replace with your actual broker API URL
-                let response = await fetch("https://api.example.com/chf-jpy-indicators");
-                let data = await response.json();
+        function fetchLivePrice() {
+            // Simulated live price (replace with actual API fetch)
+            let price = (167.7 + Math.random() * 0.8).toFixed(3); // Random price for demo
+            
+            document.getElementById('price').innerText = "CHF/JPY: " + price;
+            document.getElementById('time').innerText = "Last Update: " + new Date().toLocaleTimeString();
+            
+            let signalElement = document.getElementById('signal');
+            let strongSignalElement = document.getElementById('strong-signal');
 
-                let price = data.price;
-                let indicators = data.indicators; // Array of 7 indicators
-                
-                document.getElementById('price').innerText = "CHF/JPY: " + price;
-                document.getElementById('time').innerText = "Last Update: " + new Date().toLocaleTimeString();
-                
-                let signalElement = document.getElementById('signal');
-                let strongSignalElement = document.getElementById('strong-signal');
+            let { signal, strongSignal } = determineSignal(price);
 
-                let { signal, strongSignal } = determineSignal(indicators);
+            if (signal === "Buy") {
+                signalElement.innerText = "BUY";
+                signalElement.className = "buy";
+            } else if (signal === "Sell") {
+                signalElement.innerText = "SELL";
+                signalElement.className = "sell";
+            } else {
+                signalElement.innerText = "No Entry";
+                signalElement.className = "no-entry";
+            }
 
-                if (signal === "Buy") {
-                    signalElement.innerText = "BUY";
-                    signalElement.className = "buy";
-                } else if (signal === "Sell") {
-                    signalElement.innerText = "SELL";
-                    signalElement.className = "sell";
-                } else {
-                    signalElement.innerText = "No Entry";
-                    signalElement.className = "no-entry";
-                }
-
-                if (strongSignal === "Strong Buy") {
-                    strongSignalElement.innerText = "Strong Buy";
-                    strongSignalElement.className = "strong-buy";
-                } else if (strongSignal === "Strong Sell") {
-                    strongSignalElement.innerText = "Strong Sell";
-                    strongSignalElement.className = "strong-sell";
-                } else {
-                    strongSignalElement.innerText = ""; // Clear strong signal if none
-                }
-
-            } catch (error) {
-                console.error("Error fetching data:", error);
+            if (strongSignal === "Strong Buy") {
+                strongSignalElement.innerText = "Strong Buy";
+                strongSignalElement.className = "strong-buy";
+            } else if (strongSignal === "Strong Sell") {
+                strongSignalElement.innerText = "Strong Sell";
+                strongSignalElement.className = "strong-sell";
+            } else {
+                strongSignalElement.innerText = ""; // Clear strong signal if none
             }
         }
 
-        function determineSignal(indicators) {
-            let buySignals = indicators.filter(i => i === "Buy").length;
-            let sellSignals = indicators.filter(i => i === "Sell").length;
-
+        function determineSignal(price) {
+            price = parseFloat(price);
             let signal = "No Entry";
             let strongSignal = "";
 
-            if (buySignals >= 5) {
-                signal = "Buy";
-                if (buySignals === 7) strongSignal = "Strong Buy";
-            } else if (sellSignals >= 5) {
-                signal = "Sell";
-                if (sellSignals === 7) strongSignal = "Strong Sell";
+            if (price > 168.1) {
+                signal = 'Buy';
+                if (price > 168.3) {
+                    strongSignal = "Strong Buy";
+                }
+            } else if (price < 167.9) {
+                signal = 'Sell';
+                if (price < 167.7) {
+                    strongSignal = "Strong Sell";
+                }
             }
 
             return { signal, strongSignal };
         }
 
         // Fetch data every 5 seconds
-        fetchLiveData();
-        setInterval(fetchLiveData, 5000);
+        fetchLivePrice();
+        setInterval(fetchLivePrice, 5000);
     </script>
 </body>
 </html>
