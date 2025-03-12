@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trading Signals</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding: 50px;
+      background-color: #f0f0f0;
+    }
+    .signal {
+      font-size: 2em;
+      font-weight: bold;
+    }
+    .buy {
+      color: green;
+    }
+    .sell {
+      color: red;
+    }
+    .no-entry {
+      color: gray;
+    }
+  </style>
+</head>
+<body>
+  <div class="signal" id="signal">Loading...</div>
+  <script>
+    // Demo logic for demonstration purposes.
+    // Replace with your live signal logic that fetches data from your broker API.
+    setTimeout(function() {
+      const signals = ['Buy', 'Sell', 'No Entry'];
+      const signal = signals[Math.floor(Math.random() * signals.length)];
+      const signalElement = document.getElementById('signal');
+      if (signal === 'Buy') {
+        signalElement.className = 'signal buy';
+        signalElement.textContent = 'Buy';
+      } else if (signal === 'Sell') {
+        signalElement.className = 'signal sell';
+        signalElement.textContent = 'Sell';
+      } else {
+        signalElement.className = 'signal no-entry';
+        signalElement.textContent = 'No Entry';
+      }
+    }, 1000);
+  </script>
+</body>
+</html>
