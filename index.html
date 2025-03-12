@@ -44,61 +44,121 @@
     <h2 id="signal" class="no-entry">Loading...</h2>
     <p id="strong-signal"></p> <!-- Strong buy/sell message -->
     <p id="price">CHF/JPY: --</p>
+    <p id="entry-2min">2-Min Entry: --</p>
     <p id="time">Last Update: --</p>
-    <p id="trend-2min">2-Minute Trend: --</p>
-    <p id="entry-2min">2-Minute Entry Price: --</p> <!-- New Entry Price -->
 
     <script>
-        let priceHistory = []; // Stores last 24 updates (2 minutes)
-        const requiredUpdates = 24; // 24 updates = 2 minutes (5s interval)
-        let lastConfirmedSignal = "No Entry"; // Stores the last confirmed Buy/Sell signal
+        const API_KEY = "ac495344588e48168833eccf2a40efdb"; // Your Twelve Data API Key
+        const SYMBOL = "CHF/JPY";
+        const INTERVAL = "1min";  // Fetch data every 1 minute
+        const REFRESH_INTERVAL = 60000; // Refresh every 1 minute
 
-        function fetchLivePrice() {
-            // Simulated live price (replace with actual API fetch)
-            let price = (167.7 + Math.random() * 0.8).toFixed(3); // Random price for demo
-            
-            document.getElementById('price').innerText = "CHF/JPY: " + price;
-            document.getElementById('time').innerText = "Last Update: " + new Date().toLocaleTimeString();
-            
-            // Store the price history
-            priceHistory.push(parseFloat(price));
-            if (priceHistory.length > requiredUpdates) {
-                priceHistory.shift(); // Keep only last 2 minutes of data
+        async function fetchIndicators() {
+            try {
+                const url = `https://api.twelvedata.com/time_series?symbol=${SYMBOL}&interval=${INTERVAL}&apikey=${API_KEY}&outputsize=3`;
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (data && data.values) {
+                    const candles = data.values.map(v => parseFloat(v.close));
+                    if (candles.length < 3) return null;
+
+                    return {
+                        current: candles[0],
+                        previous1: candles[1],  // 1 min ago
+                        previous2: candles[2]   // 2 min ago
+                    };
+                }
+            } catch (error) {
+                console.error("API fetch error:", error);
+                return null;
+            }
+        }
+
+        async function fetchTechnicalIndicators() {
+            try {
+                const url = `https://api.twelvedata.com/quote?symbol=${SYMBOL}&apikey=${API_KEY}`;
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (!data) return null;
+
+                return {
+                    price: parseFloat(data.close),
+                    rsi: parseFloat(data.rsi),  // Relative Strength Index
+                    macd: parseFloat(data.macd), // MACD
+                    stochastic: parseFloat(data.stochastic_k), // Stochastic
+                    bollinger: parseFloat(data.bollinger_lower) < data.close && data.close < parseFloat(data.bollinger_upper),
+                    volume: parseFloat(data.volume),
+                    support: parseFloat(data.support),  // Support Level
+                    resistance: parseFloat(data.resistance)  // Resistance Level
+                };
+            } catch (error) {
+                console.error("API fetch error:", error);
+                return null;
+            }
+        }
+
+        async function updateSignal() {
+            const indicatorData = await fetchIndicators();
+            const techData = await fetchTechnicalIndicators();
+
+            if (!indicatorData || !techData) {
+                document.getElementById('signal').innerText = "No Entry";
+                return;
+            }
+
+            const { current, previous1, previous2 } = indicatorData;
+            document.getElementById('price').innerText = `CHF/JPY: ${current.toFixed(3)}`;
+            document.getElementById('entry-2min').innerText = `2-Min Entry: ${previous2.toFixed(3)}`;
+            document.getElementById('time').innerText = `Last Update: ${new Date().toLocaleTimeString()}`;
+
+            let signal = "No Entry";
+            let strongSignal = "";
+
+            // 7-indicator confirmation
+            let buyConditions = (
+                techData.rsi > 50 &&
+                techData.macd > 0 &&
+                techData.stochastic > 50 &&
+                techData.bollinger &&
+                current > techData.support &&
+                current > previous1 && previous1 > previous2
+            );
+
+            let sellConditions = (
+                techData.rsi < 50 &&
+                techData.macd < 0 &&
+                techData.stochastic < 50 &&
+                !techData.bollinger &&
+                current < techData.resistance &&
+                current < previous1 && previous1 < previous2
+            );
+
+            if (buyConditions) {
+                signal = "Buy";
+                if (current > previous2 * 1.0015) {
+                    strongSignal = "Strong Buy"; // Ensures trend continuation for 1-2 minutes
+                }
+            } else if (sellConditions) {
+                signal = "Sell";
+                if (current < previous2 * 0.9985) {
+                    strongSignal = "Strong Sell";
+                }
             }
 
             let signalElement = document.getElementById('signal');
             let strongSignalElement = document.getElementById('strong-signal');
-            let trend2MinElement = document.getElementById('trend-2min');
-            let entry2MinElement = document.getElementById('entry-2min');
 
-            let { signal, strongSignal, trendDirection, entryPrice } = determineSignal(priceHistory);
-
-            // Show the 2-minute trend
-            if (trendDirection > 0) {
-                trend2MinElement.innerText = "2-Minute Trend: Up";
-                trend2MinElement.className = "buy";
-            } else if (trendDirection < 0) {
-                trend2MinElement.innerText = "2-Minute Trend: Down";
-                trend2MinElement.className = "sell";
+            if (signal === "Buy") {
+                signalElement.innerText = "BUY";
+                signalElement.className = "buy";
+            } else if (signal === "Sell") {
+                signalElement.innerText = "SELL";
+                signalElement.className = "sell";
             } else {
-                trend2MinElement.innerText = "2-Minute Trend: Neutral";
-                trend2MinElement.className = "no-entry";
-            }
-
-            // Show 2-minute entry price
-            entry2MinElement.innerText = "2-Minute Entry Price: " + entryPrice.toFixed(3);
-
-            // Ensure Buy/Sell signal only changes if trend remains in the same direction
-            if (signal !== "No Entry" && (lastConfirmedSignal === "No Entry" || signal === lastConfirmedSignal)) {
-                lastConfirmedSignal = signal; // Confirm the new signal
-
-                if (signal === "Buy") {
-                    signalElement.innerText = "BUY";
-                    signalElement.className = "buy";
-                } else if (signal === "Sell") {
-                    signalElement.innerText = "SELL";
-                    signalElement.className = "sell";
-                }
+                signalElement.innerText = "No Entry";
+                signalElement.className = "no-entry";
             }
 
             if (strongSignal === "Strong Buy") {
@@ -108,40 +168,12 @@
                 strongSignalElement.innerText = "Strong Sell";
                 strongSignalElement.className = "strong-sell";
             } else {
-                strongSignalElement.innerText = ""; // Clear strong signal if none
+                strongSignalElement.innerText = "";
             }
         }
 
-        function determineSignal(priceHistory) {
-            if (priceHistory.length < requiredUpdates) {
-                return { signal: "No Entry", strongSignal: "", trendDirection: 0, entryPrice: priceHistory[0] || 0 };
-            }
-
-            let latestPrice = priceHistory[priceHistory.length - 1];
-            let entryPrice = priceHistory[0]; // Entry price is the price from 2 minutes ago
-            let trendDirection = latestPrice - entryPrice; // Trend over last 2 minutes
-
-            let signal = "No Entry";
-            let strongSignal = "";
-
-            if (latestPrice > 168.1) {
-                signal = "Buy";
-                if (trendDirection > 0.1) { // Confirm strong uptrend
-                    strongSignal = "Strong Buy";
-                }
-            } else if (latestPrice < 167.9) {
-                signal = "Sell";
-                if (trendDirection < -0.1) { // Confirm strong downtrend
-                    strongSignal = "Strong Sell";
-                }
-            }
-
-            return { signal, strongSignal, trendDirection, entryPrice };
-        }
-
-        // Fetch data every 5 seconds
-        fetchLivePrice();
-        setInterval(fetchLivePrice, 5000);
+        updateSignal();
+        setInterval(updateSignal, REFRESH_INTERVAL);
     </script>
 </body>
 </html>
