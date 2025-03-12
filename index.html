@@ -1,147 +1,78 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>CHF/JPY Trading Signal</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      text-align: center;
-      padding: 50px;
-      background-color: #f0f0f0;
-      margin: 0;
-    }
-    h1 {
-      margin-bottom: 20px;
-    }
-    .signal {
-      font-size: 2em;
-      font-weight: bold;
-      margin-top: 20px;
-    }
-    .buy {
-      color: green;
-    }
-    .sell {
-      color: red;
-    }
-    .no-entry {
-      color: gray;
-    }
-    .loading {
-      color: #555;
-    }
-    #last-update {
-      margin-top: 10px;
-      font-size: 0.9em;
-      color: gray;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CHF/JPY Signal</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 20px;
+        }
+        h1 {
+            font-size: 24px;
+        }
+        h2 {
+            font-size: 30px;
+            font-weight: bold;
+            margin-top: 20px;
+        }
+        .buy {
+            color: green;
+        }
+        .sell {
+            color: red;
+        }
+        .no-entry {
+            color: gray;
+        }
+    </style>
 </head>
 <body>
-  <h1>CHF/JPY Signal</h1>
-  <div class="signal loading" id="signal">Loading...</div>
+    <h1>CHF/JPY Signal</h1>
+    <h2 id="signal" class="no-entry">Loading...</h2>
+    <p id="price">CHF/JPY: --</p>
+    <p id="time">Last Update: --</p>
 
-  <!-- Display CHF/JPY Price -->
-  <div>
-    <span id="chf-jpy-price">CHF/JPY: --</span>
-  </div>
+    <script>
+        function fetchLivePrice() {
+            // Simulated live price (replace with actual API fetch)
+            let price = (167.7 + Math.random() * 0.8).toFixed(3); // Random price for demo
+            
+            document.getElementById('price').innerText = "CHF/JPY: " + price;
+            document.getElementById('time').innerText = "Last Update: " + new Date().toLocaleTimeString();
+            
+            let signalElement = document.getElementById('signal');
+            let signal = determineSignal(price);
 
-  <!-- Last Update Time -->
-  <div id="last-update">Last Update: --</div>
-
-  <script>
-    // ========================
-    //   CONFIGURATION
-    // ========================
-    const API_KEY = 'ac495344588e48168833eccf2a40efdb'; // Replace with your actual key
-
-    // Refresh interval (5 minutes = 300,000 milliseconds)
-    const REFRESH_INTERVAL = 300_000;
-
-    // ========================
-    //   HELPER FUNCTIONS
-    // ========================
-
-    // Fetch CHF/JPY price from API
-    async function fetchPrice() {
-      const url = `https://api.twelvedata.com/price?symbol=CHF/JPY&apikey=${API_KEY}`;
-      try {
-        const response = await fetch(url);
-        const data = await response.json();
-        if (data && data.price) {
-          return parseFloat(data.price);
-        } else {
-          console.error('Error from API:', data);
-          return null;
+            if (signal === "Buy") {
+                signalElement.innerText = "BUY";
+                signalElement.className = "buy";
+            } else if (signal === "Sell") {
+                signalElement.innerText = "SELL";
+                signalElement.className = "sell";
+            } else {
+                signalElement.innerText = "No Entry";
+                signalElement.className = "no-entry";
+            }
         }
-      } catch (error) {
-        console.error('Network or fetch error:', error);
-        return null;
-      }
-    }
 
-    // Decision Logic for Buy, Sell, or No Entry
-    function determineSignal(price) {
-      if (price > 168.5) { 
-        return 'Buy';
-      } else if (price < 167.5) { 
-        return 'Sell';
-      } else {
-        return 'No Entry';
-      }
-    }
+        function determineSignal(price) {
+            price = parseFloat(price);
+            
+            if (price > 168.1) {
+                return 'Buy';  
+            } else if (price < 167.9) {
+                return 'Sell';  
+            } else {
+                return 'No Entry';  
+            }
+        }
 
-    // ========================
-    //   MAIN LOGIC
-    // ========================
-    async function updateSignal() {
-      const signalElement = document.getElementById('signal');
-      const chfJpyPriceEl = document.getElementById('chf-jpy-price');
-      const lastUpdateEl = document.getElementById('last-update');
-
-      // Show "Loading..." text while fetching
-      signalElement.className = 'signal loading';
-      signalElement.textContent = 'Loading...';
-
-      // Fetch the latest price
-      const chfJpyPrice = await fetchPrice();
-
-      // Update displayed price
-      chfJpyPriceEl.textContent = `CHF/JPY: ${chfJpyPrice ? chfJpyPrice.toFixed(3) : '--'}`;
-
-      // If price is null, show "No Entry"
-      if (chfJpyPrice === null) {
-        signalElement.className = 'signal no-entry';
-        signalElement.textContent = 'No Entry';
-        return;
-      }
-
-      // Determine trading signal
-      const signal = determineSignal(chfJpyPrice);
-
-      // Update signal display
-      if (signal === 'Buy') {
-        signalElement.className = 'signal buy';
-        signalElement.textContent = 'Buy';
-      } else if (signal === 'Sell') {
-        signalElement.className = 'signal sell';
-        signalElement.textContent = 'Sell';
-      } else {
-        signalElement.className = 'signal no-entry';
-        signalElement.textContent = 'No Entry';
-      }
-
-      // Update last update time
-      lastUpdateEl.textContent = "Last Update: " + new Date().toLocaleTimeString();
-    }
-
-    // Run once on page load
-    updateSignal();
-
-    // Refresh signal every 5 minutes
-    setInterval(updateSignal, REFRESH_INTERVAL);
-  </script>
+        // Fetch data every 5 seconds
+        fetchLivePrice();
+        setInterval(fetchLivePrice, 5000);
+    </script>
 </body>
 </html>
