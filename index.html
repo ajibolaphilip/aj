@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Forex Trading Signals</title>
+  <title>Forex Trading Signals (Debug Version)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     /* Basic styling */
@@ -28,17 +28,18 @@
   <script src="https://unpkg.com/technicalindicators@3.1.0/dist/browser/technicalindicators.js"></script>
 </head>
 <body>
-  <h1>Forex Trading Signals</h1>
+  <h1>Forex Trading Signals (Debug Version)</h1>
   <div id="signal" class="signal">Loading...</div>
 
   <script>
     // ====================================
     // Configuration
     // ====================================
-    const API_KEY = '7f14401130ba4919be6fcc897e89623f'; // Your Twelve Data API key
-    const SYMBOL = 'EUR/JPY'; // Change to 'CHF/JPY' if needed
+    // Replace with your actual Twelve Data API key
+    const API_KEY = '7f14401130ba4919be6fcc897e89623f';
+    const SYMBOL = 'EUR/JPY';  // Change to 'CHF/JPY' if needed
     const INTERVAL = '1min';
-    const OUTPUT_SIZE = 60; // Get 60 data points (1 hour of data)
+    const OUTPUT_SIZE = 60;    // 60 data points (1 hour of data)
 
     // Construct the Twelve Data time series endpoint URL
     const TIME_SERIES_URL = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(SYMBOL)}&interval=${INTERVAL}&outputsize=${OUTPUT_SIZE}&apikey=${API_KEY}`;
@@ -47,11 +48,16 @@
     // Helper: Fetch time series data
     // ====================================
     async function fetchTimeSeries() {
+      console.log('Fetching time series from:', TIME_SERIES_URL); // DEBUG
       try {
         const response = await fetch(TIME_SERIES_URL);
+        console.log('Response status:', response.status); // DEBUG
+
         const data = await response.json();
+        console.log('Data from API:', data); // DEBUG
+
         if (data && data.values) {
-          // Twelve Data returns newest data first – reverse it to get oldest-first order
+          // Reverse so oldest data is first
           return data.values.reverse();
         } else {
           console.error('Time series error:', data);
@@ -86,11 +92,12 @@
     // Calculate indicators and derive signals
     // ====================================
     function determineIndicatorSignals(data) {
-      // Prepare arrays from the time series data
+      console.log('Determining indicator signals...'); // DEBUG
+
+      // Prepare arrays from time series
       const closes = data.map(bar => parseFloat(bar.close));
       const highs  = data.map(bar => parseFloat(bar.high));
       const lows   = data.map(bar => parseFloat(bar.low));
-      // Current price is the last close in the array
       const currentPrice = closes[closes.length - 1];
 
       // Calculate EMA(9)
@@ -129,7 +136,7 @@
       });
       const atr = atrArray[atrArray.length - 1];
 
-      // Calculate Stochastic Oscillator (period=14, signalPeriod=3)
+      // Calculate Stochastic (14, 3)
       const stochArray = technicalindicators.Stochastic.calculate({
         period: 14,
         signalPeriod: 3,
@@ -142,38 +149,63 @@
       // Compute VWAP manually
       const vwap = computeVWAP(data);
 
+      // Debug logs for the latest indicator values
+      console.log('Latest Price:', currentPrice);
+      console.log('EMA(9):', ema9);
+      console.log('RSI(14):', rsi);
+      console.log('MACD:', macdObj);
+      console.log('Bollinger Bands:', bb);
+      console.log('ATR:', atr);
+      console.log('Stochastic:', stochObj);
+      console.log('VWAP:', vwap);
+
       // ------------------------------------------
       // Derive individual indicator signals
       // ------------------------------------------
       let signals = [];
 
-      // 1. EMA Signal: if current price > EMA, then bullish; else bearish.
+      // 1. EMA signal: if current price > EMA => bullish; else => bearish
       signals.push(currentPrice > ema9 ? 'buy' : 'sell');
 
-      // 2. RSI Signal: if RSI < 30 (oversold) then buy; if > 70 (overbought) then sell; else neutral.
+      // 2. RSI signal: if RSI < 30 => oversold => buy; if RSI > 70 => overbought => sell; else => neutral
       if (rsi < 30) signals.push('buy');
       else if (rsi > 70) signals.push('sell');
       else signals.push('neutral');
 
-      // 3. MACD Signal: if MACD line > signal line, then bullish.
-      signals.push(macdObj.MACD > macdObj.signal ? 'buy' : 'sell');
+      // 3. MACD signal: if MACD > signal => bullish
+      if (macdObj && macdObj.MACD && macdObj.signal) {
+        signals.push(macdObj.MACD > macdObj.signal ? 'buy' : 'sell');
+      } else {
+        signals.push('neutral');
+      }
 
-      // 4. Bollinger Bands Signal: if current price is below the lower band then buy; above the upper band then sell; else neutral.
-      if (currentPrice < bb.lower) signals.push('buy');
-      else if (currentPrice > bb.upper) signals.push('sell');
-      else signals.push('neutral');
+      // 4. Bollinger Bands signal
+      if (bb && bb.lower && bb.upper) {
+        if (currentPrice < bb.lower) signals.push('buy');
+        else if (currentPrice > bb.upper) signals.push('sell');
+        else signals.push('neutral');
+      } else {
+        signals.push('neutral');
+      }
 
-      // 5. ATR Filter: if ATR is high (here using 1% of current price as threshold), add a "confirm" signal.
-      if (atr > (currentPrice * 0.01)) signals.push('confirm');
-      else signals.push('neutral');
+      // 5. ATR filter: if ATR > 1% of current price => "confirm"
+      if (atr && atr > (currentPrice * 0.01)) {
+        signals.push('confirm');
+      } else {
+        signals.push('neutral');
+      }
 
-      // 6. Stochastic Signal: if %K < 20 and rising (assume %K > %D) then buy; if %K > 80 and falling then sell; else neutral.
-      if (stochObj.k < 20 && stochObj.k > stochObj.d) signals.push('buy');
-      else if (stochObj.k > 80 && stochObj.k < stochObj.d) signals.push('sell');
-      else signals.push('neutral');
+      // 6. Stochastic signal: if K < 20 & rising => buy; if K > 80 & falling => sell
+      if (stochObj && stochObj.k !== undefined && stochObj.d !== undefined) {
+        if (stochObj.k < 20 && stochObj.k > stochObj.d) signals.push('buy');
+        else if (stochObj.k > 80 && stochObj.k < stochObj.d) signals.push('sell');
+        else signals.push('neutral');
+      } else {
+        signals.push('neutral');
+      }
 
-      // 7. VWAP Signal: if current price > VWAP then bullish; else bearish.
-      if (vwap !== null) {
+      // 7. VWAP signal: if currentPrice > VWAP => bullish; else => bearish
+      if (vwap) {
         signals.push(currentPrice > vwap ? 'buy' : 'sell');
       } else {
         signals.push('neutral');
@@ -183,19 +215,23 @@
     }
 
     // ====================================
-    // Combine individual indicator signals into a final decision
+    // Combine signals into a final decision
     // ====================================
     function combineSignals(indicatorSignals) {
+      console.log('Combining signals:', indicatorSignals); // DEBUG
       let buyCount = 0, sellCount = 0, confirmCount = 0;
+
       indicatorSignals.forEach(sig => {
         if (sig === 'buy') buyCount++;
         else if (sig === 'sell') sellCount++;
-        else if (sig === 'confirm') confirmCount++; // treat confirm as extra weight
+        else if (sig === 'confirm') confirmCount++; 
       });
 
-      // Use a simple weighted count: each confirm adds extra weight.
+      // Weighted approach: each 'confirm' is worth +2 to either buy or sell
       const totalBuy = buyCount + (confirmCount * 2);
       const totalSell = sellCount + (confirmCount * 2);
+
+      console.log(`totalBuy: ${totalBuy}, totalSell: ${totalSell}`); // DEBUG
 
       if (totalBuy >= 5 && totalBuy > totalSell) return 'Buy';
       else if (totalSell >= 5 && totalSell > totalBuy) return 'Sell';
@@ -203,21 +239,28 @@
     }
 
     // ====================================
-    // Main: Fetch data, compute indicators, and update the signal display
+    // Main: Fetch data, compute indicators, update the signal
     // ====================================
     async function updateTradingSignal() {
+      console.log('updateTradingSignal called'); // DEBUG
+
       const data = await fetchTimeSeries();
       const signalEl = document.getElementById('signal');
+
       if (!data) {
+        console.log('No data returned, setting No Entry'); // DEBUG
         signalEl.textContent = 'No Entry';
         signalEl.className = 'signal no-entry';
         return;
       }
-      const { currentPrice, signals } = determineIndicatorSignals(data);
-      console.log('Indicator signals:', signals, 'Current Price:', currentPrice);
-      const finalSignal = combineSignals(signals);
 
-      // Update the display based on the final signal
+      const { currentPrice, signals } = determineIndicatorSignals(data);
+      console.log('Signals array:', signals, 'Current Price:', currentPrice); // DEBUG
+
+      const finalSignal = combineSignals(signals);
+      console.log('Final Signal:', finalSignal); // DEBUG
+
+      // Update the display
       if (finalSignal === 'Buy') {
         signalEl.textContent = 'Buy';
         signalEl.className = 'signal buy';
@@ -230,7 +273,7 @@
       }
     }
 
-    // Run once on page load, then update every minute (60000 ms)
+    // Call on page load, then every minute
     updateTradingSignal();
     setInterval(updateTradingSignal, 60000);
   </script>
