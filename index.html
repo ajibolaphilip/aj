@@ -47,8 +47,8 @@
     <p id="time">Last Update: --</p>
 
     <script>
-        let priceHistory = []; // Store last 36 price updates (3 minutes)
-        const requiredUpdates = 36; // 36 updates = 3 minutes
+        let priceHistory = []; // Store last 12 price updates (1 minute)
+        const requiredUpdates = 12; // 12 updates = 1 minute (5s interval)
 
         function fetchLivePrice() {
             // Simulated live price (replace with actual API fetch)
@@ -60,7 +60,7 @@
             let signalElement = document.getElementById('signal');
             let strongSignalElement = document.getElementById('strong-signal');
 
-            // Add price to history and keep only the last 36 values
+            // Add price to history and keep only the last 12 values
             priceHistory.push(parseFloat(price));
             if (priceHistory.length > requiredUpdates) {
                 priceHistory.shift();
@@ -104,12 +104,12 @@
 
             if (latestPrice > 168.1) {
                 signal = "Buy";
-                if (trendDirection > 0.15) { // Check if trend is moving UP strongly
+                if (trendDirection > 0.1) { // Check if trend is moving UP strongly
                     strongSignal = "Strong Buy";
                 }
             } else if (latestPrice < 167.9) {
                 signal = "Sell";
-                if (trendDirection < -0.15) { // Check if trend is moving DOWN strongly
+                if (trendDirection < -0.1) { // Check if trend is moving DOWN strongly
                     strongSignal = "Strong Sell";
                 }
             }
