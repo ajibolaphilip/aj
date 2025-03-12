@@ -45,10 +45,12 @@
     <p id="strong-signal"></p> <!-- Strong buy/sell message -->
     <p id="price">CHF/JPY: --</p>
     <p id="time">Last Update: --</p>
+    <p id="trend-2min">2-Minute Trend: --</p>
 
     <script>
-        let priceHistory = []; // Store last 12 price updates (1 minute)
-        const requiredUpdates = 12; // 12 updates = 1 minute (5s interval)
+        let priceHistory = []; // Stores last 24 updates (2 minutes)
+        const requiredUpdates = 24; // 24 updates = 2 minutes (5s interval)
+        let lastConfirmedSignal = "No Entry"; // Stores the last confirmed Buy/Sell signal
 
         function fetchLivePrice() {
             // Simulated live price (replace with actual API fetch)
@@ -57,26 +59,41 @@
             document.getElementById('price').innerText = "CHF/JPY: " + price;
             document.getElementById('time').innerText = "Last Update: " + new Date().toLocaleTimeString();
             
-            let signalElement = document.getElementById('signal');
-            let strongSignalElement = document.getElementById('strong-signal');
-
-            // Add price to history and keep only the last 12 values
+            // Store the price history
             priceHistory.push(parseFloat(price));
             if (priceHistory.length > requiredUpdates) {
-                priceHistory.shift();
+                priceHistory.shift(); // Keep only last 2 minutes of data
             }
 
-            let { signal, strongSignal } = determineSignal(priceHistory);
+            let signalElement = document.getElementById('signal');
+            let strongSignalElement = document.getElementById('strong-signal');
+            let trend2MinElement = document.getElementById('trend-2min');
 
-            if (signal === "Buy") {
-                signalElement.innerText = "BUY";
-                signalElement.className = "buy";
-            } else if (signal === "Sell") {
-                signalElement.innerText = "SELL";
-                signalElement.className = "sell";
+            let { signal, strongSignal, trendDirection } = determineSignal(priceHistory);
+
+            // Show the 2-minute trend
+            if (trendDirection > 0) {
+                trend2MinElement.innerText = "2-Minute Trend: Up";
+                trend2MinElement.className = "buy";
+            } else if (trendDirection < 0) {
+                trend2MinElement.innerText = "2-Minute Trend: Down";
+                trend2MinElement.className = "sell";
             } else {
-                signalElement.innerText = "No Entry";
-                signalElement.className = "no-entry";
+                trend2MinElement.innerText = "2-Minute Trend: Neutral";
+                trend2MinElement.className = "no-entry";
+            }
+
+            // Ensure Buy/Sell signal only changes if trend remains in the same direction
+            if (signal !== "No Entry" && (lastConfirmedSignal === "No Entry" || signal === lastConfirmedSignal)) {
+                lastConfirmedSignal = signal; // Confirm the new signal
+
+                if (signal === "Buy") {
+                    signalElement.innerText = "BUY";
+                    signalElement.className = "buy";
+                } else if (signal === "Sell") {
+                    signalElement.innerText = "SELL";
+                    signalElement.className = "sell";
+                }
             }
 
             if (strongSignal === "Strong Buy") {
@@ -86,35 +103,35 @@
                 strongSignalElement.innerText = "Strong Sell";
                 strongSignalElement.className = "strong-sell";
             } else {
-                strongSignalElement.innerText = ""; // Clear strong signal if not confirmed
+                strongSignalElement.innerText = ""; // Clear strong signal if none
             }
         }
 
         function determineSignal(priceHistory) {
             if (priceHistory.length < requiredUpdates) {
-                return { signal: "No Entry", strongSignal: "" };
+                return { signal: "No Entry", strongSignal: "", trendDirection: 0 };
             }
 
             let latestPrice = priceHistory[priceHistory.length - 1];
             let oldestPrice = priceHistory[0];
-            let trendDirection = latestPrice - oldestPrice; // Check if price is increasing or decreasing
+            let trendDirection = latestPrice - oldestPrice; // Trend over last 2 minutes
 
             let signal = "No Entry";
             let strongSignal = "";
 
             if (latestPrice > 168.1) {
                 signal = "Buy";
-                if (trendDirection > 0.1) { // Check if trend is moving UP strongly
+                if (trendDirection > 0.1) { // Confirm strong uptrend
                     strongSignal = "Strong Buy";
                 }
             } else if (latestPrice < 167.9) {
                 signal = "Sell";
-                if (trendDirection < -0.1) { // Check if trend is moving DOWN strongly
+                if (trendDirection < -0.1) { // Confirm strong downtrend
                     strongSignal = "Strong Sell";
                 }
             }
 
-            return { signal, strongSignal };
+            return { signal, strongSignal, trendDirection };
         }
 
         // Fetch data every 5 seconds
