@@ -9,6 +9,7 @@
             font-family: Arial, sans-serif;
             text-align: center;
             padding: 20px;
+            background-color: #f4f4f4;
         }
         h1 {
             font-size: 24px;
@@ -37,6 +38,10 @@
         .no-entry {
             color: gray;
         }
+        .timer {
+            font-size: 18px;
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
@@ -44,156 +49,98 @@
     <h2 id="signal" class="no-entry">Loading...</h2>
     <p id="strong-signal"></p> <!-- Strong buy/sell message -->
     <p id="price">CHF/JPY: --</p>
-    <p id="entry-2min">2-Min Entry: --</p>
+    <p id="entry">2-Min Entry Price: --</p>
     <p id="time">Last Update: --</p>
+    <p class="timer" id="countdown">Next update in: 5s</p>
 
     <script>
-        const API_KEY = "ac495344588e48168833eccf2a40efdb"; // Your Twelve Data API Key
-        const SYMBOL = "CHF/JPY";
-        const INTERVAL = "1min";
-        const PRICE_REFRESH_INTERVAL = 1000; // Price updates every second
-        const SIGNAL_REFRESH_INTERVAL = 60000; // Signal updates every minute
+        const API_KEY = 'ac495344588e48168833eccf2a40efdb'; // Your Twelve Data API key
+        let refreshInterval = 5; // Refresh every 5 seconds
+        let countdown = refreshInterval;
 
-        async function fetchLivePrice() {
+        async function fetchLiveData() {
             try {
-                const url = `https://api.twelvedata.com/price?symbol=${SYMBOL}&apikey=${API_KEY}`;
-                const response = await fetch(url);
+                const response = await fetch(`https://api.twelvedata.com/time_series?symbol=CHF/JPY&interval=1min&outputsize=3&apikey=${API_KEY}`);
                 const data = await response.json();
 
-                if (data && data.price) {
-                    document.getElementById('price').innerText = `CHF/JPY: ${parseFloat(data.price).toFixed(3)}`;
+                if (data.values) {
+                    const prices = data.values.map(v => parseFloat(v.close));
+                    const currentPrice = prices[0]; // Latest price
+                    const entryPrice = prices[2]; // Price from 2 minutes ago
+
+                    document.getElementById('price').innerText = "CHF/JPY: " + currentPrice.toFixed(3);
+                    document.getElementById('entry').innerText = "2-Min Entry Price: " + entryPrice.toFixed(3);
+                    document.getElementById('time').innerText = "Last Update: " + new Date().toLocaleTimeString();
+
+                    updateSignal(currentPrice, entryPrice);
                 }
             } catch (error) {
-                console.error("Price fetch error:", error);
+                console.error("Error fetching data:", error);
             }
         }
 
-        async function fetchIndicators() {
-            try {
-                const url = `https://api.twelvedata.com/time_series?symbol=${SYMBOL}&interval=${INTERVAL}&apikey=${API_KEY}&outputsize=3`;
-                const response = await fetch(url);
-                const data = await response.json();
+        function updateSignal(currentPrice, entryPrice) {
+            let signalElement = document.getElementById('signal');
+            let strongSignalElement = document.getElementById('strong-signal');
 
-                if (data && data.values) {
-                    const candles = data.values.map(v => parseFloat(v.close));
-                    if (candles.length < 3) return null;
-
-                    return {
-                        current: candles[0],
-                        previous1: candles[1],  
-                        previous2: candles[2]   
-                    };
-                }
-            } catch (error) {
-                console.error("API fetch error:", error);
-                return null;
-            }
-        }
-
-        async function fetchTechnicalIndicators() {
-            try {
-                const url = `https://api.twelvedata.com/quote?symbol=${SYMBOL}&apikey=${API_KEY}`;
-                const response = await fetch(url);
-                const data = await response.json();
-
-                if (!data) return null;
-
-                return {
-                    price: parseFloat(data.close),
-                    rsi: parseFloat(data.rsi),
-                    macd: parseFloat(data.macd),
-                    stochastic: parseFloat(data.stochastic_k),
-                    bollinger: parseFloat(data.bollinger_lower) < data.close && data.close < parseFloat(data.bollinger_upper),
-                    volume: parseFloat(data.volume),
-                    support: parseFloat(data.support),
-                    resistance: parseFloat(data.resistance)
-                };
-            } catch (error) {
-                console.error("API fetch error:", error);
-                return null;
-            }
-        }
-
-        async function updateSignal() {
-            const indicatorData = await fetchIndicators();
-            const techData = await fetchTechnicalIndicators();
-
-            if (!indicatorData || !techData) {
-                document.getElementById('signal').innerText = "No Entry";
-                return;
-            }
-
-            const { current, previous1, previous2 } = indicatorData;
-            document.getElementById('entry-2min').innerText = `2-Min Entry: ${previous2.toFixed(3)}`;
-            document.getElementById('time').innerText = `Last Update: ${new Date().toLocaleTimeString()}`;
+            // Get indicator confirmations
+            let confirmations = calculateIndicators(currentPrice);
 
             let signal = "No Entry";
             let strongSignal = "";
 
-            let buyConditions = (
-                techData.rsi > 50 &&
-                techData.macd > 0 &&
-                techData.stochastic > 50 &&
-                techData.bollinger &&
-                current > techData.support &&
-                current > previous1 && previous1 > previous2
-            );
-
-            let sellConditions = (
-                techData.rsi < 50 &&
-                techData.macd < 0 &&
-                techData.stochastic < 50 &&
-                !techData.bollinger &&
-                current < techData.resistance &&
-                current < previous1 && previous1 < previous2
-            );
-
-            if (buyConditions) {
-                signal = "Buy";
-                if (current > previous2 * 1.0015) {
-                    strongSignal = "Strong Buy";
-                }
-            } else if (sellConditions) {
-                signal = "Sell";
-                if (current < previous2 * 0.9985) {
-                    strongSignal = "Strong Sell";
+            if (confirmations >= 3) {
+                if (currentPrice > entryPrice) {
+                    signal = "Buy";
+                    if (confirmations >= 5) strongSignal = "Strong Buy";
+                } else if (currentPrice < entryPrice) {
+                    signal = "Sell";
+                    if (confirmations >= 5) strongSignal = "Strong Sell";
                 }
             }
 
-            let signalElement = document.getElementById('signal');
-            let strongSignalElement = document.getElementById('strong-signal');
+            // Update display
+            signalElement.innerText = signal;
+            signalElement.className = signal.toLowerCase().replace(" ", "-");
 
-            if (signal === "Buy") {
-                signalElement.innerText = "BUY";
-                signalElement.className = "buy";
-            } else if (signal === "Sell") {
-                signalElement.innerText = "SELL";
-                signalElement.className = "sell";
-            } else {
-                signalElement.innerText = "No Entry";
-                signalElement.className = "no-entry";
-            }
+            strongSignalElement.innerText = strongSignal ? strongSignal : "";
+            strongSignalElement.className = strongSignal ? strongSignal.toLowerCase().replace(" ", "-") : "";
 
-            if (strongSignal === "Strong Buy") {
-                strongSignalElement.innerText = "Strong Buy";
-                strongSignalElement.className = "strong-buy";
-            } else if (strongSignal === "Strong Sell") {
-                strongSignalElement.innerText = "Strong Sell";
-                strongSignalElement.className = "strong-sell";
-            } else {
-                strongSignalElement.innerText = "";
-            }
         }
 
-        function updateLiveTime() {
-            document.getElementById('time').innerText = `Live Time: ${new Date().toLocaleTimeString()}`;
+        function calculateIndicators(price) {
+            // Simulated indicator logic for now
+            let confirmations = 0;
+
+            // Dummy logic for 7 indicators (Replace with real calculations)
+            let movingAverage = price > 168.0 ? 1 : 0;
+            let rsi = price > 167.8 ? 1 : 0;
+            let macd = price > 167.9 ? 1 : 0;
+            let bollinger = price > 168.1 ? 1 : 0;
+            let supportResistance = price > 167.85 ? 1 : 0;
+            let volume = price > 167.7 ? 1 : 0;
+            let stochastic = price > 167.6 ? 1 : 0;
+
+            confirmations = movingAverage + rsi + macd + bollinger + supportResistance + volume + stochastic;
+            return confirmations;
         }
 
-        fetchLivePrice();
-        setInterval(fetchLivePrice, PRICE_REFRESH_INTERVAL);
-        updateSignal();
-        setInterval(updateSignal, SIGNAL_REFRESH_INTERVAL);
-        setInterval(updateLiveTime, 1000); // Update live time every second
+        function startCountdown() {
+            countdown = refreshInterval;
+            setInterval(() => {
+                countdown--;
+                document.getElementById("countdown").innerText = `Next update in: ${countdown}s`;
+                if (countdown <= 0) {
+                    countdown = refreshInterval;
+                }
+            }, 1000);
+        }
+
+        // Auto-refresh every 5 seconds
+        fetchLiveData();
+        setInterval(fetchLiveData, refreshInterval * 1000);
+        startCountdown();
+
     </script>
 </body>
 </html>
