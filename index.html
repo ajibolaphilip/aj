@@ -46,6 +46,68 @@
         signalElement.textContent = 'No Entry';
       }
     }, 1000);
-  </script>
+  <script>
+  // Replace with your Alpha Vantage API key
+  const API_KEY = 'U8CBLZ1YSGN5BHWY';
+
+  // Function to fetch exchange rate data
+  async function fetchExchangeRate(fromCurrency, toCurrency) {
+    const url = `https://www.alphavantage.co/query?function=CURRENCY_EXCHANGE_RATE&from_currency=${fromCurrency}&to_currency=${toCurrency}&apikey=${API_KEY}`;
+    try {
+      const response = await fetch(url);
+      const data = await response.json();
+      // Check the structure based on Alpha Vantage response
+      return data["Realtime Currency Exchange Rate"];
+    } catch (error) {
+      console.error("Error fetching data:", error);
+      return null;
+    }
+  }
+
+  // Sample logic to simulate trading signal determination
+  async function getTradingSignal() {
+    const chfJpyData = await fetchExchangeRate('CHF', 'JPY');
+    const eurJpyData = await fetchExchangeRate('EUR', 'JPY');
+
+    // Placeholder for indicator calculations
+    // In a real scenario, you would compute your 7 indicator conditions here.
+    // For now, we use a dummy logic based on exchange rate values.
+
+    // Example: if both exchange rates are above a certain threshold, signal Buy.
+    if (chfJpyData && eurJpyData) {
+      const chfJpyRate = parseFloat(chfJpyData["5. Exchange Rate"]);
+      const eurJpyRate = parseFloat(eurJpyData["5. Exchange Rate"]);
+      
+      // Replace these thresholds with your own indicator-based logic.
+      if (chfJpyRate > 120 && eurJpyRate > 135) {
+        return 'Buy';
+      } else if (chfJpyRate < 110 && eurJpyRate < 130) {
+        return 'Sell';
+      }
+    }
+    return 'No Entry';
+  }
+
+  // Function to update the signal on the page
+  async function updateSignal() {
+    const signalElement = document.getElementById('signal');
+    const signal = await getTradingSignal();
+
+    if (signal === 'Buy') {
+      signalElement.className = 'signal buy';
+      signalElement.textContent = 'Buy';
+    } else if (signal === 'Sell') {
+      signalElement.className = 'signal sell';
+      signalElement.textContent = 'Sell';
+    } else {
+      signalElement.className = 'signal no-entry';
+      signalElement.textContent = 'No Entry';
+    }
+  }
+
+  // Update signal every minute (60000 milliseconds)
+  updateSignal(); // Initial call
+  setInterval(updateSignal, 60000);
+</script>
 </body>
 </html>
