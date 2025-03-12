@@ -1,19 +1,24 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Trading Signals</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Forex Trading Signals</title>
   <style>
     body {
       font-family: Arial, sans-serif;
       text-align: center;
       padding: 50px;
       background-color: #f0f0f0;
+      margin: 0;
+    }
+    h1 {
+      margin-bottom: 20px;
     }
     .signal {
       font-size: 2em;
       font-weight: bold;
+      margin-top: 20px;
     }
     .buy {
       color: green;
@@ -24,17 +29,111 @@
     .no-entry {
       color: gray;
     }
+    .loading {
+      color: #555;
+    }
+    .pair-prices {
+      margin-top: 20px;
+    }
+    .pair-prices span {
+      display: inline-block;
+      margin: 0 10px;
+      font-weight: bold;
+    }
   </style>
 </head>
 <body>
-  <div class="signal" id="signal">Loading...</div>
+  <h1>CHF/JPY & EUR/JPY Signals</h1>
+  <div class="signal loading" id="signal">Loading...</div>
+
+  <!-- Optional: Display the current prices for each pair -->
+  <div class="pair-prices">
+    <span id="chf-jpy-price">CHF/JPY: --</span>
+    <span id="eur-jpy-price">EUR/JPY: --</span>
+  </div>
+
   <script>
-    // Demo logic for demonstration purposes.
-    // Replace with your live signal logic that fetches data from your broker API.
-    setTimeout(function() {
-      const signals = ['Buy', 'Sell', 'No Entry'];
-      const signal = signals[Math.floor(Math.random() * signals.length)];
+    // ========================
+    //   CONFIGURATION
+    // ========================
+    const API_KEY = '7f14401130ba4919be6fcc897e89623f'; // <-- Replace with your real key
+
+    // How often to refresh data (in milliseconds)
+    const REFRESH_INTERVAL = 60_000; // 1 minute
+
+    // ========================
+    //   HELPER FUNCTIONS
+    // ========================
+
+    // Fetch the current price for a given symbol from Twelve Data
+    async function fetchPrice(symbol) {
+      const url = `https://api.twelvedata.com/price?symbol=${symbol}&apikey=${API_KEY}`;
+      try {
+        const response = await fetch(url);
+        const data = await response.json();
+        // If successful, data should have { "price": "123.456" }
+        if (data && data.price) {
+          return parseFloat(data.price);
+        } else {
+          console.error('Error from API:', data);
+          return null;
+        }
+      } catch (error) {
+        console.error('Network or fetch error:', error);
+        return null;
+      }
+    }
+
+    // Decide whether to Buy, Sell, or No Entry based on your logic
+    // Currently uses dummy thresholds. Replace with your 7-indicator logic!
+    function determineSignal(chfJpyPrice, eurJpyPrice) {
+      // Example dummy logic:
+      // If both pairs are above a certain threshold, "Buy"
+      // If both pairs are below a certain threshold, "Sell"
+      // Otherwise, "No Entry"
+
+      if (chfJpyPrice > 120 && eurJpyPrice > 135) {
+        return 'Buy';
+      } else if (chfJpyPrice < 110 && eurJpyPrice < 130) {
+        return 'Sell';
+      } else {
+        return 'No Entry';
+      }
+    }
+
+    // ========================
+    //   MAIN LOGIC
+    // ========================
+    async function updateSignal() {
       const signalElement = document.getElementById('signal');
+      const chfJpyPriceEl = document.getElementById('chf-jpy-price');
+      const eurJpyPriceEl = document.getElementById('eur-jpy-price');
+
+      // Show "Loading..." text while fetching
+      signalElement.className = 'signal loading';
+      signalElement.textContent = 'Loading...';
+
+      // Fetch the latest prices
+      const [chfJpyPrice, eurJpyPrice] = await Promise.all([
+        fetchPrice('CHF/JPY'),
+        fetchPrice('EUR/JPY')
+      ]);
+
+      // Update the displayed prices (optional)
+      chfJpyPriceEl.textContent = `CHF/JPY: ${chfJpyPrice ? chfJpyPrice.toFixed(3) : '--'}`;
+      eurJpyPriceEl.textContent = `EUR/JPY: ${eurJpyPrice ? eurJpyPrice.toFixed(3) : '--'}`;
+
+      // If either price is null, we can't make a decision
+      if (chfJpyPrice === null || eurJpyPrice === null) {
+        signalElement.className = 'signal no-entry';
+        signalElement.textContent = 'No Entry';
+        return;
+      }
+
+      // Determine the signal based on your logic
+      const signal = determineSignal(chfJpyPrice, eurJpyPrice);
+
+      // Update the page with the signal
       if (signal === 'Buy') {
         signalElement.className = 'signal buy';
         signalElement.textContent = 'Buy';
@@ -45,69 +144,13 @@
         signalElement.className = 'signal no-entry';
         signalElement.textContent = 'No Entry';
       }
-    }, 1000);
-  <script>
-  // Replace with your Alpha Vantage API key
-  const API_KEY = 'U8CBLZ1YSGN5BHWY';
-
-  // Function to fetch exchange rate data
-  async function fetchExchangeRate(fromCurrency, toCurrency) {
-    const url = `https://www.alphavantage.co/query?function=CURRENCY_EXCHANGE_RATE&from_currency=${fromCurrency}&to_currency=${toCurrency}&apikey=${U8CBLZ1YSGN5BHWY}`;
-    try {
-      const response = await fetch(url);
-      const data = await response.json();
-      // Check the structure based on Alpha Vantage response
-      return data["Realtime Currency Exchange Rate"];
-    } catch (error) {
-      console.error("Error fetching data:", error);
-      return null;
     }
-  }
 
-  // Sample logic to simulate trading signal determination
-  async function getTradingSignal() {
-    const chfJpyData = await fetchExchangeRate('CHF', 'JPY');
-    const eurJpyData = await fetchExchangeRate('EUR', 'JPY');
+    // Run once on page load
+    updateSignal();
 
-    // Placeholder for indicator calculations
-    // In a real scenario, you would compute your 7 indicator conditions here.
-    // For now, we use a dummy logic based on exchange rate values.
-
-    // Example: if both exchange rates are above a certain threshold, signal Buy.
-    if (chfJpyData && eurJpyData) {
-      const chfJpyRate = parseFloat(chfJpyData["5. Exchange Rate"]);
-      const eurJpyRate = parseFloat(eurJpyData["5. Exchange Rate"]);
-      
-      // Replace these thresholds with your own indicator-based logic.
-      if (chfJpyRate > 120 && eurJpyRate > 135) {
-        return 'Buy';
-      } else if (chfJpyRate < 110 && eurJpyRate < 130) {
-        return 'Sell';
-      }
-    }
-    return 'No Entry';
-  }
-
-  // Function to update the signal on the page
-  async function updateSignal() {
-    const signalElement = document.getElementById('signal');
-    const signal = await getTradingSignal();
-
-    if (signal === 'Buy') {
-      signalElement.className = 'signal buy';
-      signalElement.textContent = 'Buy';
-    } else if (signal === 'Sell') {
-      signalElement.className = 'signal sell';
-      signalElement.textContent = 'Sell';
-    } else {
-      signalElement.className = 'signal no-entry';
-      signalElement.textContent = 'No Entry';
-    }
-  }
-
-  // Update signal every minute (60000 milliseconds)
-  updateSignal(); // Initial call
-  setInterval(updateSignal, 60000);
-</script>
+    // Refresh signal every minute (or whatever interval you set)
+    setInterval(updateSignal, REFRESH_INTERVAL);
+  </script>
 </body>
 </html>
