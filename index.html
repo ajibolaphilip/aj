@@ -1,266 +1,152 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Forex Trading Signals (Debug Version)</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <title>Two-Indicator Forex Signals</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
-    /* Basic styling */
     body {
       font-family: Arial, sans-serif;
       background-color: #f0f0f0;
       text-align: center;
-      padding: 20px;
       margin: 0;
+      padding: 40px;
     }
     h1 {
-      margin-bottom: 10px;
+      margin-bottom: 20px;
     }
     .signal {
       font-size: 2em;
-      margin-top: 20px;
+      font-weight: bold;
+      margin-top: 30px;
     }
-    .buy { color: green; }
-    .sell { color: red; }
-    .no-entry { color: gray; }
+    .buy {
+      color: green;
+    }
+    .sell {
+      color: red;
+    }
+    .no-entry {
+      color: gray;
+    }
   </style>
-  <!-- Load technical indicators library from CDN -->
+  <!-- Technical Indicators Library -->
   <script src="https://unpkg.com/technicalindicators@3.1.0/dist/browser/technicalindicators.js"></script>
 </head>
 <body>
-  <h1>Forex Trading Signals (Debug Version)</h1>
+  <h1>RSI & MACD Trading Signals</h1>
   <div id="signal" class="signal">Loading...</div>
 
   <script>
-    // ====================================
-    // Configuration
-    // ====================================
-    // Replace with your actual Twelve Data API key
-    const API_KEY = 'cd6ec7f7362f452ca0c8fe6f254cf44d';
-    const SYMBOL = 'EUR/JPY';  // Change to 'CHF/JPY' if needed
+    // ======================================
+    // 1. CONFIGURATION
+    // ======================================
+    // Insert your actual Twelve Data API key here:
+    const API_KEY = 'YOUR_TWELVE_DATA_API_KEY';
+    // Symbol to fetch (change if desired)
+    const SYMBOL = 'EUR/JPY';
+    // Timeframe: 1-minute
     const INTERVAL = '1min';
-    const OUTPUT_SIZE = 60;    // 60 data points (1 hour of data)
+    // Number of candlesticks to fetch
+    const OUTPUT_SIZE = 60;
 
-    // Construct the Twelve Data time series endpoint URL
+    // Twelve Data time series endpoint
     const TIME_SERIES_URL = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(SYMBOL)}&interval=${INTERVAL}&outputsize=${OUTPUT_SIZE}&apikey=${API_KEY}`;
 
-    // ====================================
-    // Helper: Fetch time series data
-    // ====================================
+    // ======================================
+    // 2. FETCH HISTORICAL DATA
+    // ======================================
     async function fetchTimeSeries() {
-      console.log('Fetching time series from:', TIME_SERIES_URL); // DEBUG
       try {
         const response = await fetch(TIME_SERIES_URL);
-        console.log('Response status:', response.status); // DEBUG
-
         const data = await response.json();
-        console.log('Data from API:', data); // DEBUG
-
+        // If valid data, data.values should be present
         if (data && data.values) {
-          // Reverse so oldest data is first
+          // Reverse to get oldest candle first
           return data.values.reverse();
-        } else {
-          console.error('Time series error:', data);
-          return null;
         }
-      } catch (error) {
-        console.error('Fetch error:', error);
+        return null;
+      } catch (err) {
+        console.error('Error fetching time series:', err);
         return null;
       }
     }
 
-    // ====================================
-    // Helper: Compute VWAP manually
-    // VWAP = (Sum(typicalPrice * volume)) / (Sum(volume))
-    // where typicalPrice = (high + low + close) / 3
-    // ====================================
-    function computeVWAP(data) {
-      let cumulativePV = 0, cumulativeVolume = 0;
-      data.forEach(bar => {
-        const high = parseFloat(bar.high);
-        const low = parseFloat(bar.low);
-        const close = parseFloat(bar.close);
-        const volume = parseFloat(bar.volume);
-        const typicalPrice = (high + low + close) / 3;
-        cumulativePV += (typicalPrice * volume);
-        cumulativeVolume += volume;
+    // ======================================
+    // 3. CALCULATE RSI & MACD
+    // ======================================
+    function calculateIndicators(candles) {
+      // Extract the 'close' prices
+      const closes = candles.map(c => parseFloat(c.close));
+
+      // RSI(14)
+      const rsiValues = technicalindicators.RSI.calculate({
+        period: 14,
+        values: closes
       });
-      return cumulativeVolume ? cumulativePV / cumulativeVolume : null;
-    }
+      // Last RSI value
+      const latestRSI = rsiValues[rsiValues.length - 1];
 
-    // ====================================
-    // Calculate indicators and derive signals
-    // ====================================
-    function determineIndicatorSignals(data) {
-      console.log('Determining indicator signals...'); // DEBUG
-
-      // Prepare arrays from time series
-      const closes = data.map(bar => parseFloat(bar.close));
-      const highs  = data.map(bar => parseFloat(bar.high));
-      const lows   = data.map(bar => parseFloat(bar.low));
-      const currentPrice = closes[closes.length - 1];
-
-      // Calculate EMA(9)
-      const emaArray = technicalindicators.EMA.calculate({ period: 9, values: closes });
-      const ema9 = emaArray[emaArray.length - 1];
-
-      // Calculate RSI(14)
-      const rsiArray = technicalindicators.RSI.calculate({ period: 14, values: closes });
-      const rsi = rsiArray[rsiArray.length - 1];
-
-      // Calculate MACD (fast=12, slow=26, signal=9)
-      const macdArray = technicalindicators.MACD.calculate({
-        values: closes,
+      // MACD (12, 26, 9)
+      const macdValues = technicalindicators.MACD.calculate({
         fastPeriod: 12,
         slowPeriod: 26,
         signalPeriod: 9,
         SimpleMAOscillator: false,
-        SimpleMASignal: false
+        SimpleMASignal: false,
+        values: closes
       });
-      const macdObj = macdArray[macdArray.length - 1];
+      // Last MACD object: { MACD, signal, histogram }
+      const latestMACD = macdValues[macdValues.length - 1];
 
-      // Calculate Bollinger Bands (period=20, stdDev=2)
-      const bbArray = technicalindicators.BollingerBands.calculate({
-        period: 20,
-        values: closes,
-        stdDev: 2
-      });
-      const bb = bbArray[bbArray.length - 1];
-
-      // Calculate ATR(14)
-      const atrArray = technicalindicators.ATR.calculate({
-        period: 14,
-        high: highs,
-        low: lows,
-        close: closes
-      });
-      const atr = atrArray[atrArray.length - 1];
-
-      // Calculate Stochastic (14, 3)
-      const stochArray = technicalindicators.Stochastic.calculate({
-        period: 14,
-        signalPeriod: 3,
-        high: highs,
-        low: lows,
-        close: closes
-      });
-      const stochObj = stochArray[stochArray.length - 1];
-
-      // Compute VWAP manually
-      const vwap = computeVWAP(data);
-
-      // Debug logs for the latest indicator values
-      console.log('Latest Price:', currentPrice);
-      console.log('EMA(9):', ema9);
-      console.log('RSI(14):', rsi);
-      console.log('MACD:', macdObj);
-      console.log('Bollinger Bands:', bb);
-      console.log('ATR:', atr);
-      console.log('Stochastic:', stochObj);
-      console.log('VWAP:', vwap);
-
-      // ------------------------------------------
-      // Derive individual indicator signals
-      // ------------------------------------------
-      let signals = [];
-
-      // 1. EMA signal: if current price > EMA => bullish; else => bearish
-      signals.push(currentPrice > ema9 ? 'buy' : 'sell');
-
-      // 2. RSI signal: if RSI < 30 => oversold => buy; if RSI > 70 => overbought => sell; else => neutral
-      if (rsi < 30) signals.push('buy');
-      else if (rsi > 70) signals.push('sell');
-      else signals.push('neutral');
-
-      // 3. MACD signal: if MACD > signal => bullish
-      if (macdObj && macdObj.MACD && macdObj.signal) {
-        signals.push(macdObj.MACD > macdObj.signal ? 'buy' : 'sell');
-      } else {
-        signals.push('neutral');
-      }
-
-      // 4. Bollinger Bands signal
-      if (bb && bb.lower && bb.upper) {
-        if (currentPrice < bb.lower) signals.push('buy');
-        else if (currentPrice > bb.upper) signals.push('sell');
-        else signals.push('neutral');
-      } else {
-        signals.push('neutral');
-      }
-
-      // 5. ATR filter: if ATR > 1% of current price => "confirm"
-      if (atr && atr > (currentPrice * 0.01)) {
-        signals.push('confirm');
-      } else {
-        signals.push('neutral');
-      }
-
-      // 6. Stochastic signal: if K < 20 & rising => buy; if K > 80 & falling => sell
-      if (stochObj && stochObj.k !== undefined && stochObj.d !== undefined) {
-        if (stochObj.k < 20 && stochObj.k > stochObj.d) signals.push('buy');
-        else if (stochObj.k > 80 && stochObj.k < stochObj.d) signals.push('sell');
-        else signals.push('neutral');
-      } else {
-        signals.push('neutral');
-      }
-
-      // 7. VWAP signal: if currentPrice > VWAP => bullish; else => bearish
-      if (vwap) {
-        signals.push(currentPrice > vwap ? 'buy' : 'sell');
-      } else {
-        signals.push('neutral');
-      }
-
-      return { currentPrice, signals };
+      return { latestRSI, latestMACD };
     }
 
-    // ====================================
-    // Combine signals into a final decision
-    // ====================================
-    function combineSignals(indicatorSignals) {
-      console.log('Combining signals:', indicatorSignals); // DEBUG
-      let buyCount = 0, sellCount = 0, confirmCount = 0;
+    // ======================================
+    // 4. DETERMINE BUY/SELL/NO ENTRY
+    // ======================================
+    function getSignal(rsi, macdObj) {
+      // Basic logic example:
+      // Buy if MACD > signal line AND RSI is below 70 but above 50 (moderately bullish)
+      // Sell if MACD < signal line AND RSI < 30 (oversold turning bearish)
+      // Otherwise No Entry
 
-      indicatorSignals.forEach(sig => {
-        if (sig === 'buy') buyCount++;
-        else if (sig === 'sell') sellCount++;
-        else if (sig === 'confirm') confirmCount++; 
-      });
+      if (!rsi || !macdObj) {
+        return 'No Entry';
+      }
 
-      // Weighted approach: each 'confirm' is worth +2 to either buy or sell
-      const totalBuy = buyCount + (confirmCount * 2);
-      const totalSell = sellCount + (confirmCount * 2);
+      const { MACD, signal } = macdObj;
 
-      console.log(`totalBuy: ${totalBuy}, totalSell: ${totalSell}`); // DEBUG
-
-      if (totalBuy >= 5 && totalBuy > totalSell) return 'Buy';
-      else if (totalSell >= 5 && totalSell > totalBuy) return 'Sell';
-      else return 'No Entry';
+      if (MACD > signal && rsi > 50 && rsi < 70) {
+        return 'Buy';
+      } else if (MACD < signal && rsi < 30) {
+        return 'Sell';
+      } else {
+        return 'No Entry';
+      }
     }
 
-    // ====================================
-    // Main: Fetch data, compute indicators, update the signal
-    // ====================================
-    async function updateTradingSignal() {
-      console.log('updateTradingSignal called'); // DEBUG
+    // ======================================
+    // 5. MAIN: FETCH, CALCULATE, DISPLAY
+    // ======================================
+    async function updateSignal() {
+      const signalEl = document.getElementById('signal');
+      signalEl.textContent = 'Loading...';
 
       const data = await fetchTimeSeries();
-      const signalEl = document.getElementById('signal');
-
       if (!data) {
-        console.log('No data returned, setting No Entry'); // DEBUG
         signalEl.textContent = 'No Entry';
         signalEl.className = 'signal no-entry';
         return;
       }
 
-      const { currentPrice, signals } = determineIndicatorSignals(data);
-      console.log('Signals array:', signals, 'Current Price:', currentPrice); // DEBUG
+      // Calculate RSI & MACD
+      const { latestRSI, latestMACD } = calculateIndicators(data);
 
-      const finalSignal = combineSignals(signals);
-      console.log('Final Signal:', finalSignal); // DEBUG
+      // Decide final signal
+      const finalSignal = getSignal(latestRSI, latestMACD);
 
-      // Update the display
+      // Update page
       if (finalSignal === 'Buy') {
         signalEl.textContent = 'Buy';
         signalEl.className = 'signal buy';
@@ -273,9 +159,9 @@
       }
     }
 
-    // Call on page load, then every minute
-    updateTradingSignal();
-    setInterval(updateTradingSignal, 60000);
+    // Initial run + update every minute
+    updateSignal();
+    setInterval(updateSignal, 60000);
   </script>
 </body>
 </html>
