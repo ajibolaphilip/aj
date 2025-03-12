@@ -1,238 +1,156 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Forex Trading Signals</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    /* Basic styling */
     body {
       font-family: Arial, sans-serif;
-      background-color: #f0f0f0;
       text-align: center;
-      padding: 20px;
+      padding: 50px;
+      background-color: #f0f0f0;
       margin: 0;
     }
     h1 {
-      margin-bottom: 10px;
+      margin-bottom: 20px;
     }
     .signal {
       font-size: 2em;
+      font-weight: bold;
       margin-top: 20px;
     }
-    .buy { color: green; }
-    .sell { color: red; }
-    .no-entry { color: gray; }
+    .buy {
+      color: green;
+    }
+    .sell {
+      color: red;
+    }
+    .no-entry {
+      color: gray;
+    }
+    .loading {
+      color: #555;
+    }
+    .pair-prices {
+      margin-top: 20px;
+    }
+    .pair-prices span {
+      display: inline-block;
+      margin: 0 10px;
+      font-weight: bold;
+    }
   </style>
-  <!-- Load technical indicators library from CDN -->
-  <script src="https://unpkg.com/technicalindicators@3.1.0/dist/browser/technicalindicators.js"></script>
 </head>
 <body>
-  <h1>Forex Trading Signals</h1>
-  <div id="signal" class="signal">Loading...</div>
+  <h1>CHF/JPY & EUR/JPY Signals</h1>
+  <div class="signal loading" id="signal">Loading...</div>
+
+  <!-- Optional: Display the current prices for each pair -->
+  <div class="pair-prices">
+    <span id="chf-jpy-price">CHF/JPY: --</span>
+    <span id="eur-jpy-price">EUR/JPY: --</span>
+  </div>
 
   <script>
-    // ====================================
-    // Configuration
-    // ====================================
-    const API_KEY = 'ac495344588e48168833eccf2a40efdb'; // Your Twelve Data API key
-    const SYMBOL = 'EUR/JPY'; // Change to 'CHF/JPY' if needed
-    const INTERVAL = '1min';
-    const OUTPUT_SIZE = 60; // Get 60 data points (1 hour of data)
+    // ========================
+    //   CONFIGURATION
+    // ========================
+    const API_KEY = 'ac495344588e48168833eccf2a40efdb'; // <-- Replace with your real key
 
-    // Construct the Twelve Data time series endpoint URL
-    const TIME_SERIES_URL = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(SYMBOL)}&interval=${INTERVAL}&outputsize=${OUTPUT_SIZE}&apikey=${API_KEY}`;
+    // How often to refresh data (in milliseconds)
+    const REFRESH_INTERVAL = 60_000; // 1 minute
 
-    // ====================================
-    // Helper: Fetch time series data
-    // ====================================
-    async function fetchTimeSeries() {
+    // ========================
+    //   HELPER FUNCTIONS
+    // ========================
+
+    // Fetch the current price for a given symbol from Twelve Data
+    async function fetchPrice(symbol) {
+      const url = `https://api.twelvedata.com/price?symbol=${symbol}&apikey=${API_KEY}`;
       try {
-        const response = await fetch(TIME_SERIES_URL);
+        const response = await fetch(url);
         const data = await response.json();
-        if (data && data.values) {
-          // Twelve Data returns newest data first – reverse it to get oldest-first order
-          return data.values.reverse();
+        // If successful, data should have { "price": "123.456" }
+        if (data && data.price) {
+          return parseFloat(data.price);
         } else {
-          console.error('Time series error:', data);
+          console.error('Error from API:', data);
           return null;
         }
       } catch (error) {
-        console.error('Fetch error:', error);
+        console.error('Network or fetch error:', error);
         return null;
       }
     }
 
-    // ====================================
-    // Helper: Compute VWAP manually
-    // VWAP = (Sum(typicalPrice * volume)) / (Sum(volume))
-    // where typicalPrice = (high + low + close) / 3
-    // ====================================
-    function computeVWAP(data) {
-      let cumulativePV = 0, cumulativeVolume = 0;
-      data.forEach(bar => {
-        const high = parseFloat(bar.high);
-        const low = parseFloat(bar.low);
-        const close = parseFloat(bar.close);
-        const volume = parseFloat(bar.volume);
-        const typicalPrice = (high + low + close) / 3;
-        cumulativePV += (typicalPrice * volume);
-        cumulativeVolume += volume;
-      });
-      return cumulativeVolume ? cumulativePV / cumulativeVolume : null;
-    }
+    // Decide whether to Buy, Sell, or No Entry based on your logic
+    // Currently uses dummy thresholds. Replace with your 7-indicator logic!
+    function determineSignal(chfJpyPrice, eurJpyPrice) {
+      // Example dummy logic:
+      // If both pairs are above a certain threshold, "Buy"
+      // If both pairs are below a certain threshold, "Sell"
+      // Otherwise, "No Entry"
 
-    // ====================================
-    // Calculate indicators and derive signals
-    // ====================================
-    function determineIndicatorSignals(data) {
-      // Prepare arrays from the time series data
-      const closes = data.map(bar => parseFloat(bar.close));
-      const highs  = data.map(bar => parseFloat(bar.high));
-      const lows   = data.map(bar => parseFloat(bar.low));
-      // Current price is the last close in the array
-      const currentPrice = closes[closes.length - 1];
-
-      // Calculate EMA(9)
-      const emaArray = technicalindicators.EMA.calculate({ period: 9, values: closes });
-      const ema9 = emaArray[emaArray.length - 1];
-
-      // Calculate RSI(14)
-      const rsiArray = technicalindicators.RSI.calculate({ period: 14, values: closes });
-      const rsi = rsiArray[rsiArray.length - 1];
-
-      // Calculate MACD (fast=12, slow=26, signal=9)
-      const macdArray = technicalindicators.MACD.calculate({
-        values: closes,
-        fastPeriod: 12,
-        slowPeriod: 26,
-        signalPeriod: 9,
-        SimpleMAOscillator: false,
-        SimpleMASignal: false
-      });
-      const macdObj = macdArray[macdArray.length - 1];
-
-      // Calculate Bollinger Bands (period=20, stdDev=2)
-      const bbArray = technicalindicators.BollingerBands.calculate({
-        period: 20,
-        values: closes,
-        stdDev: 2
-      });
-      const bb = bbArray[bbArray.length - 1];
-
-      // Calculate ATR(14)
-      const atrArray = technicalindicators.ATR.calculate({
-        period: 14,
-        high: highs,
-        low: lows,
-        close: closes
-      });
-      const atr = atrArray[atrArray.length - 1];
-
-      // Calculate Stochastic Oscillator (period=14, signalPeriod=3)
-      const stochArray = technicalindicators.Stochastic.calculate({
-        period: 14,
-        signalPeriod: 3,
-        high: highs,
-        low: lows,
-        close: closes
-      });
-      const stochObj = stochArray[stochArray.length - 1];
-
-      // Compute VWAP manually
-      const vwap = computeVWAP(data);
-
-      // ------------------------------------------
-      // Derive individual indicator signals
-      // ------------------------------------------
-      let signals = [];
-
-      // 1. EMA Signal: if current price > EMA, then bullish; else bearish.
-      signals.push(currentPrice > ema9 ? 'buy' : 'sell');
-
-      // 2. RSI Signal: if RSI < 30 (oversold) then buy; if > 70 (overbought) then sell; else neutral.
-      if (rsi < 30) signals.push('buy');
-      else if (rsi > 70) signals.push('sell');
-      else signals.push('neutral');
-
-      // 3. MACD Signal: if MACD line > signal line, then bullish.
-      signals.push(macdObj.MACD > macdObj.signal ? 'buy' : 'sell');
-
-      // 4. Bollinger Bands Signal: if current price is below the lower band then buy; above the upper band then sell; else neutral.
-      if (currentPrice < bb.lower) signals.push('buy');
-      else if (currentPrice > bb.upper) signals.push('sell');
-      else signals.push('neutral');
-
-      // 5. ATR Filter: if ATR is high (here using 1% of current price as threshold), add a "confirm" signal.
-      if (atr > (currentPrice * 0.01)) signals.push('confirm');
-      else signals.push('neutral');
-
-      // 6. Stochastic Signal: if %K < 20 and rising (assume %K > %D) then buy; if %K > 80 and falling then sell; else neutral.
-      if (stochObj.k < 20 && stochObj.k > stochObj.d) signals.push('buy');
-      else if (stochObj.k > 80 && stochObj.k < stochObj.d) signals.push('sell');
-      else signals.push('neutral');
-
-      // 7. VWAP Signal: if current price > VWAP then bullish; else bearish.
-      if (vwap !== null) {
-        signals.push(currentPrice > vwap ? 'buy' : 'sell');
+      if (chfJpyPrice > 120 && eurJpyPrice > 135) {
+        return 'Buy';
+      } else if (chfJpyPrice < 110 && eurJpyPrice < 130) {
+        return 'Sell';
       } else {
-        signals.push('neutral');
+        return 'No Entry';
       }
-
-      return { currentPrice, signals };
     }
 
-    // ====================================
-    // Combine individual indicator signals into a final decision
-    // ====================================
-    function combineSignals(indicatorSignals) {
-      let buyCount = 0, sellCount = 0, confirmCount = 0;
-      indicatorSignals.forEach(sig => {
-        if (sig === 'buy') buyCount++;
-        else if (sig === 'sell') sellCount++;
-        else if (sig === 'confirm') confirmCount++; // treat confirm as extra weight
-      });
+    // ========================
+    //   MAIN LOGIC
+    // ========================
+    async function updateSignal() {
+      const signalElement = document.getElementById('signal');
+      const chfJpyPriceEl = document.getElementById('chf-jpy-price');
+      const eurJpyPriceEl = document.getElementById('eur-jpy-price');
 
-      // Use a simple weighted count: each confirm adds extra weight.
-      const totalBuy = buyCount + (confirmCount * 2);
-      const totalSell = sellCount + (confirmCount * 2);
+      // Show "Loading..." text while fetching
+      signalElement.className = 'signal loading';
+      signalElement.textContent = 'Loading...';
 
-      if (totalBuy >= 5 && totalBuy > totalSell) return 'Buy';
-      else if (totalSell >= 5 && totalSell > totalBuy) return 'Sell';
-      else return 'No Entry';
-    }
+      // Fetch the latest prices
+      const [chfJpyPrice, eurJpyPrice] = await Promise.all([
+        fetchPrice('CHF/JPY'),
+        fetchPrice('EUR/JPY')
+      ]);
 
-    // ====================================
-    // Main: Fetch data, compute indicators, and update the signal display
-    // ====================================
-    async function updateTradingSignal() {
-      const data = await fetchTimeSeries();
-      const signalEl = document.getElementById('signal');
-      if (!data) {
-        signalEl.textContent = 'No Entry';
-        signalEl.className = 'signal no-entry';
+      // Update the displayed prices (optional)
+      chfJpyPriceEl.textContent = `CHF/JPY: ${chfJpyPrice ? chfJpyPrice.toFixed(3) : '--'}`;
+      eurJpyPriceEl.textContent = `EUR/JPY: ${eurJpyPrice ? eurJpyPrice.toFixed(3) : '--'}`;
+
+      // If either price is null, we can't make a decision
+      if (chfJpyPrice === null || eurJpyPrice === null) {
+        signalElement.className = 'signal no-entry';
+        signalElement.textContent = 'No Entry';
         return;
       }
-      const { currentPrice, signals } = determineIndicatorSignals(data);
-      console.log('Indicator signals:', signals, 'Current Price:', currentPrice);
-      const finalSignal = combineSignals(signals);
 
-      // Update the display based on the final signal
-      if (finalSignal === 'Buy') {
-        signalEl.textContent = 'Buy';
-        signalEl.className = 'signal buy';
-      } else if (finalSignal === 'Sell') {
-        signalEl.textContent = 'Sell';
-        signalEl.className = 'signal sell';
+      // Determine the signal based on your logic
+      const signal = determineSignal(chfJpyPrice, eurJpyPrice);
+
+      // Update the page with the signal
+      if (signal === 'Buy') {
+        signalElement.className = 'signal buy';
+        signalElement.textContent = 'Buy';
+      } else if (signal === 'Sell') {
+        signalElement.className = 'signal sell';
+        signalElement.textContent = 'Sell';
       } else {
-        signalEl.textContent = 'No Entry';
-        signalEl.className = 'signal no-entry';
+        signalElement.className = 'signal no-entry';
+        signalElement.textContent = 'No Entry';
       }
     }
 
-    // Run once on page load, then update every minute (60000 ms)
-    updateTradingSignal();
-    setInterval(updateTradingSignal, 60000);
+    // Run once on page load
+    updateSignal();
+
+    // Refresh signal every minute (or whatever interval you set)
+    setInterval(updateSignal, REFRESH_INTERVAL);
   </script>
 </body>
 </html>
