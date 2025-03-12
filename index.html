@@ -2,15 +2,15 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Two-Indicator Forex Signals</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>CHF/JPY & EUR/JPY Signals (4 Indicators)</title>
   <style>
     body {
       font-family: Arial, sans-serif;
-      background-color: #f0f0f0;
       text-align: center;
+      padding: 50px;
+      background-color: #f0f0f0;
       margin: 0;
-      padding: 40px;
     }
     h1 {
       margin-bottom: 20px;
@@ -18,7 +18,7 @@
     .signal {
       font-size: 2em;
       font-weight: bold;
-      margin-top: 30px;
+      margin-top: 20px;
     }
     .buy {
       color: green;
@@ -29,65 +29,81 @@
     .no-entry {
       color: gray;
     }
+    .loading {
+      color: #555;
+    }
+    .pair-prices {
+      margin-top: 20px;
+    }
+    .pair-prices span {
+      display: inline-block;
+      margin: 0 10px;
+      font-weight: bold;
+    }
   </style>
-  <!-- Technical Indicators Library -->
+
+  <!-- Load the technical indicators library from CDN -->
   <script src="https://unpkg.com/technicalindicators@3.1.0/dist/browser/technicalindicators.js"></script>
 </head>
 <body>
-  <h1>RSI & MACD Trading Signals</h1>
-  <div id="signal" class="signal">Loading...</div>
+  <h1>CHF/JPY & EUR/JPY Signals (4 Indicators)</h1>
+  <div class="signal loading" id="signal">Loading...</div>
+
+  <!-- Optional: Display the current prices for each pair -->
+  <div class="pair-prices">
+    <span id="chf-jpy-price">CHF/JPY: --</span>
+    <span id="eur-jpy-price">EUR/JPY: --</span>
+  </div>
 
   <script>
-    // ======================================
-    // 1. CONFIGURATION
-    // ======================================
-    // Insert your actual Twelve Data API key here:
-    const API_KEY = 'cd6ec7f7362f452ca0c8fe6f254cf44d';
-    // Symbol to fetch (change if desired)
-    const SYMBOL = 'EUR/JPY';
-    // Timeframe: 1-minute
+    // =========================================
+    // CONFIGURATION
+    // =========================================
+    const API_KEY = 'cd6ec7f7362f452ca0c8fe6f254cf44d'; // <-- Replace with your real key
+    const REFRESH_INTERVAL = 60_000; // 1 minute
+    // We'll fetch 30 bars of 1-minute data for each pair
+    const OUTPUT_SIZE = 30;
     const INTERVAL = '1min';
-    // Number of candlesticks to fetch
-    const OUTPUT_SIZE = 60;
 
-    // Twelve Data time series endpoint
-    const TIME_SERIES_URL = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(SYMBOL)}&interval=${INTERVAL}&outputsize=${OUTPUT_SIZE}&apikey=${API_KEY}`;
-
-    // ======================================
-    // 2. FETCH HISTORICAL DATA
-    // ======================================
-    async function fetchTimeSeries() {
+    // =========================================
+    // HELPER: Fetch time series data for a pair
+    // =========================================
+    async function fetchTimeSeries(symbol) {
+      // This endpoint returns candlestick data we can use for indicators
+      const url = `https://api.twelvedata.com/time_series?symbol=${symbol}&interval=${INTERVAL}&outputsize=${OUTPUT_SIZE}&apikey=${API_KEY}`;
       try {
-        const response = await fetch(TIME_SERIES_URL);
+        const response = await fetch(url);
         const data = await response.json();
-        // If valid data, data.values should be present
         if (data && data.values) {
-          // Reverse to get oldest candle first
+          // Reverse so the oldest candle is first
           return data.values.reverse();
+        } else {
+          console.error('Time series error for', symbol, data);
+          return null;
         }
-        return null;
-      } catch (err) {
-        console.error('Error fetching time series:', err);
+      } catch (error) {
+        console.error('Network or fetch error:', error);
         return null;
       }
     }
 
-    // ======================================
-    // 3. CALCULATE RSI & MACD
-    // ======================================
-    function calculateIndicators(candles) {
-      // Extract the 'close' prices
+    // =========================================
+    // HELPER: Compute 4 indicators using technicalindicators
+    // =========================================
+    function computeIndicators(candles) {
+      // Extract close, high, low
       const closes = candles.map(c => parseFloat(c.close));
+      const highs  = candles.map(c => parseFloat(c.high));
+      const lows   = candles.map(c => parseFloat(c.low));
 
       // RSI(14)
       const rsiValues = technicalindicators.RSI.calculate({
         period: 14,
         values: closes
       });
-      // Last RSI value
       const latestRSI = rsiValues[rsiValues.length - 1];
 
-      // MACD (12, 26, 9)
+      // MACD(12, 26, 9)
       const macdValues = technicalindicators.MACD.calculate({
         fastPeriod: 12,
         slowPeriod: 26,
@@ -96,72 +112,127 @@
         SimpleMASignal: false,
         values: closes
       });
-      // Last MACD object: { MACD, signal, histogram }
-      const latestMACD = macdValues[macdValues.length - 1];
+      const latestMACD = macdValues[macdValues.length - 1]; // { MACD, signal, histogram }
 
-      return { latestRSI, latestMACD };
+      // Bollinger Bands (period=20, stdDev=2) – might be short for 30 bars, but okay for demo
+      const bbValues = technicalindicators.BollingerBands.calculate({
+        period: 20,
+        values: closes,
+        stdDev: 2
+      });
+      const latestBB = bbValues[bbValues.length - 1]; // { lower, middle, upper }
+
+      // Stochastic (14, 3)
+      const stochValues = technicalindicators.Stochastic.calculate({
+        period: 14,
+        signalPeriod: 3,
+        high: highs,
+        low: lows,
+        close: closes
+      });
+      const latestStoch = stochValues[stochValues.length - 1]; // { k, d }
+
+      return { latestRSI, latestMACD, latestBB, latestStoch };
     }
 
-    // ======================================
-    // 4. DETERMINE BUY/SELL/NO ENTRY
-    // ======================================
-    function getSignal(rsi, macdObj) {
-      // Basic logic example:
-      // Buy if MACD > signal line AND RSI is below 70 but above 50 (moderately bullish)
-      // Sell if MACD < signal line AND RSI < 30 (oversold turning bearish)
-      // Otherwise No Entry
+    // =========================================
+    // HELPER: Decide "Buy", "Sell", or "No Entry" for each pair
+    //         using the 4 indicators
+    // =========================================
+    function determineSignalFromIndicators({ latestRSI, latestMACD, latestBB, latestStoch }, currentPrice) {
+      // Simple, placeholder logic:
+      // 1) RSI: < 30 => bullish, > 70 => bearish
+      // 2) MACD: if MACD > signal => bullish, else => bearish
+      // 3) Bollinger: if price < lower => bullish, price > upper => bearish
+      // 4) Stochastic: if k < 20 => bullish, if k > 80 => bearish
+      // We'll just "vote" on bullish vs bearish and see which wins.
 
-      if (!rsi || !macdObj) {
-        return 'No Entry';
+      if (!latestRSI || !latestMACD || !latestBB || !latestStoch) {
+        return 'No Entry'; // missing data
       }
 
-      const { MACD, signal } = macdObj;
+      let bullishVotes = 0;
+      let bearishVotes = 0;
 
-      if (MACD > signal && rsi > 50 && rsi < 70) {
-        return 'Buy';
-      } else if (MACD < signal && rsi < 30) {
-        return 'Sell';
-      } else {
-        return 'No Entry';
-      }
+      // RSI vote
+      if (latestRSI < 30) bullishVotes++;
+      else if (latestRSI > 70) bearishVotes++;
+
+      // MACD vote
+      if (latestMACD.MACD > latestMACD.signal) bullishVotes++;
+      else bearishVotes++;
+
+      // Bollinger vote
+      if (currentPrice < latestBB.lower) bullishVotes++;
+      else if (currentPrice > latestBB.upper) bearishVotes++;
+
+      // Stochastic vote
+      if (latestStoch.k < 20) bullishVotes++;
+      else if (latestStoch.k > 80) bearishVotes++;
+
+      // Simple threshold
+      if (bullishVotes >= 3 && bullishVotes > bearishVotes) return 'Buy';
+      if (bearishVotes >= 3 && bearishVotes > bullishVotes) return 'Sell';
+      return 'No Entry';
     }
 
-    // ======================================
-    // 5. MAIN: FETCH, CALCULATE, DISPLAY
-    // ======================================
+    // =========================================
+    // MAIN: Update the combined signal for CHF/JPY and EUR/JPY
+    // =========================================
     async function updateSignal() {
-      const signalEl = document.getElementById('signal');
-      signalEl.textContent = 'Loading...';
+      const signalElement = document.getElementById('signal');
+      const chfJpyPriceEl = document.getElementById('chf-jpy-price');
+      const eurJpyPriceEl = document.getElementById('eur-jpy-price');
 
-      const data = await fetchTimeSeries();
-      if (!data) {
-        signalEl.textContent = 'No Entry';
-        signalEl.className = 'signal no-entry';
+      signalElement.className = 'signal loading';
+      signalElement.textContent = 'Loading...';
+
+      // Fetch time series for both pairs in parallel
+      const [chfData, eurData] = await Promise.all([
+        fetchTimeSeries('CHF/JPY'),
+        fetchTimeSeries('EUR/JPY')
+      ]);
+
+      if (!chfData || !eurData) {
+        signalElement.className = 'signal no-entry';
+        signalElement.textContent = 'No Entry';
         return;
       }
 
-      // Calculate RSI & MACD
-      const { latestRSI, latestMACD } = calculateIndicators(data);
+      // Get current (latest) price from each series
+      const chfJpyCurrent = parseFloat(chfData[chfData.length - 1].close);
+      const eurJpyCurrent = parseFloat(eurData[eurData.length - 1].close);
 
-      // Decide final signal
-      const finalSignal = getSignal(latestRSI, latestMACD);
+      // Update displayed prices
+      chfJpyPriceEl.textContent = `CHF/JPY: ${chfJpyCurrent.toFixed(3)}`;
+      eurJpyPriceEl.textContent = `EUR/JPY: ${eurJpyCurrent.toFixed(3)}`;
 
-      // Update page
-      if (finalSignal === 'Buy') {
-        signalEl.textContent = 'Buy';
-        signalEl.className = 'signal buy';
-      } else if (finalSignal === 'Sell') {
-        signalEl.textContent = 'Sell';
-        signalEl.className = 'signal sell';
+      // Compute indicators for each pair
+      const chfIndicators = computeIndicators(chfData);
+      const eurIndicators = computeIndicators(eurData);
+
+      // Get signals for each pair separately
+      const chfSignal = determineSignalFromIndicators(chfIndicators, chfJpyCurrent);
+      const eurSignal = determineSignalFromIndicators(eurIndicators, eurJpyCurrent);
+
+      // Combine or keep it simple: If both say "Buy", show "Buy"; both "Sell", show "Sell"; else "No Entry"
+      if (chfSignal === 'Buy' && eurSignal === 'Buy') {
+        signalElement.className = 'signal buy';
+        signalElement.textContent = 'Buy';
+      } else if (chfSignal === 'Sell' && eurSignal === 'Sell') {
+        signalElement.className = 'signal sell';
+        signalElement.textContent = 'Sell';
       } else {
-        signalEl.textContent = 'No Entry';
-        signalEl.className = 'signal no-entry';
+        signalElement.className = 'signal no-entry';
+        signalElement.textContent = 'No Entry';
       }
     }
 
-    // Initial run + update every minute
+    // Run once on page load
     updateSignal();
-    setInterval(updateSignal, 60000);
+
+    // Refresh every minute
+    setInterval(updateSignal, REFRESH_INTERVAL);
   </script>
 </body>
 </html>
