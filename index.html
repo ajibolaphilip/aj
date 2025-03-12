@@ -46,6 +46,7 @@
     <p id="price">CHF/JPY: --</p>
     <p id="time">Last Update: --</p>
     <p id="trend-2min">2-Minute Trend: --</p>
+    <p id="entry-2min">2-Minute Entry Price: --</p> <!-- New Entry Price -->
 
     <script>
         let priceHistory = []; // Stores last 24 updates (2 minutes)
@@ -68,8 +69,9 @@
             let signalElement = document.getElementById('signal');
             let strongSignalElement = document.getElementById('strong-signal');
             let trend2MinElement = document.getElementById('trend-2min');
+            let entry2MinElement = document.getElementById('entry-2min');
 
-            let { signal, strongSignal, trendDirection } = determineSignal(priceHistory);
+            let { signal, strongSignal, trendDirection, entryPrice } = determineSignal(priceHistory);
 
             // Show the 2-minute trend
             if (trendDirection > 0) {
@@ -82,6 +84,9 @@
                 trend2MinElement.innerText = "2-Minute Trend: Neutral";
                 trend2MinElement.className = "no-entry";
             }
+
+            // Show 2-minute entry price
+            entry2MinElement.innerText = "2-Minute Entry Price: " + entryPrice.toFixed(3);
 
             // Ensure Buy/Sell signal only changes if trend remains in the same direction
             if (signal !== "No Entry" && (lastConfirmedSignal === "No Entry" || signal === lastConfirmedSignal)) {
@@ -109,12 +114,12 @@
 
         function determineSignal(priceHistory) {
             if (priceHistory.length < requiredUpdates) {
-                return { signal: "No Entry", strongSignal: "", trendDirection: 0 };
+                return { signal: "No Entry", strongSignal: "", trendDirection: 0, entryPrice: priceHistory[0] || 0 };
             }
 
             let latestPrice = priceHistory[priceHistory.length - 1];
-            let oldestPrice = priceHistory[0];
-            let trendDirection = latestPrice - oldestPrice; // Trend over last 2 minutes
+            let entryPrice = priceHistory[0]; // Entry price is the price from 2 minutes ago
+            let trendDirection = latestPrice - entryPrice; // Trend over last 2 minutes
 
             let signal = "No Entry";
             let strongSignal = "";
@@ -131,7 +136,7 @@
                 }
             }
 
-            return { signal, strongSignal, trendDirection };
+            return { signal, strongSignal, trendDirection, entryPrice };
         }
 
         // Fetch data every 5 seconds
