@@ -37,16 +37,16 @@
     <p id="live-time">Live Time: --</p>
 
     <script>
-        let apiKey = "WqTj1IBXujRjakwCtFvYtmo9829VuZk"; // FCS API Key
+        let apiKey = "QV4m_eEvpkka_6gRug28"; // TradeMade API Key
         let entryPrice = null;
         let lastSignal = "No Entry";
 
         function fetchLivePrice() {
-            fetch(`https://fcsapi.com/api-v3/forex/latest?symbol=CHF/JPY&access_key=${apiKey}`)
+            fetch(`https://api.trademade.com/forex/live?pair=CHFJPY&api_key=${apiKey}`)
                 .then(response => response.json())
                 .then(data => {
-                    if (data.status && data.response.length > 0) {
-                        let price = parseFloat(data.response[0].c);
+                    if (data.success && data.price) {
+                        let price = parseFloat(data.price);
                         updateDisplay(price);
                     } else {
                         console.error("Invalid API response:", data);
