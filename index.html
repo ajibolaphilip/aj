@@ -1,145 +1,141 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CHF/JPY Signal</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            text-align: center;
-            padding: 20px;
-        }
-        h1 {
-            font-size: 24px;
-        }
-        h2 {
-            font-size: 30px;
-            font-weight: bold;
-            margin-top: 20px;
-        }
-        .buy {
-            color: green;
-        }
-        .sell {
-            color: red;
-        }
-        .strong-buy {
-            color: darkgreen;
-            font-size: 20px;
-            font-weight: bold;
-        }
-        .strong-sell {
-            color: darkred;
-            font-size: 20px;
-            font-weight: bold;
-        }
-        .no-entry {
-            color: gray;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Professional CHF/JPY Signal</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding: 20px;
+      background-color: #f4f4f4;
+    }
+    h1 { font-size: 24px; }
+    h2 { font-size: 30px; font-weight: bold; margin-top: 20px; }
+    .buy { color: green; }
+    .sell { color: red; }
+    .no-entry { color: gray; }
+  </style>
+  <!-- EmailJS SDK -->
+  <script src="https://cdn.emailjs.com/dist/email.min.js"></script>
+  <script>
+    (function(){
+      emailjs.init("Ajibola"); // Your EmailJS User ID
+    })();
+  </script>
 </head>
 <body>
-    <h1>CHF/JPY Signal</h1>
-    <h2 id="signal" class="no-entry">Loading...</h2>
-    <p id="strong-signal"></p> <!-- Strong buy/sell message -->
-    <p id="price">Price: --</p>
-    <p id="entry">2 Min Entry: --</p>
-    <p id="last-update">Last Update: --</p>
-    <p id="live-time">Live Time: --</p>
+  <h1>Professional CHF/JPY Signal</h1>
+  <h2 id="signal" class="no-entry">Loading...</h2>
+  <p id="price">Price: --</p>
+  <p id="entry-price">2 Hour Entry: --</p>
+  <p id="live-time">Live Time: --</p>
 
-    <script>
-        const API_KEY = "i7IqoBCbFx3zPFLLBluhrvRvo";
-        const PAIR_ID = 57; // CHF/JPY
+  <script>
+    /* ---------------------------
+       Configuration & Constants
+       --------------------------- */
+    const API_KEY = "wsBQlmcI6t8FIsXCdS-w"; // Your TradeMade API key
+    const PAIR = "CHFJPY"; // Currency pair
+    const CONFIRMATION_PERIOD = 60; // Confirmation period in seconds (Demo: 60s, Real: 7200s)
+    const FETCH_INTERVAL = 1000; // Fetch price every second
 
-        let entryPrice = null;
-        let confirmTrendTime = 0;
+    let priceHistory = [];
+    let lastConfirmedSignal = "No Entry";
+    let signalStartTime = null;
 
-        function fetchLivePrice() {
-            const API_URL = `https://fcsapi.com/api-v3/forex/latest?id=${PAIR_ID}&access_key=${API_KEY}`;
-
-            fetch(API_URL)
-                .then(response => response.json())
-                .then(data => {
-                    if (data && data.response && data.response[0]) {
-                        let price = parseFloat(data.response[0].c);
-                        updateDisplay(price);
-                    } else {
-                        console.error("Invalid API response:", data);
-                    }
-                })
-                .catch(error => console.error("Error fetching price:", error));
+    /* ---------------------------
+       Fetch Live Price
+       --------------------------- */
+    async function fetchLivePrice() {
+      const url = `https://api.trademade.com/forex/live?pair=${PAIR}&api_key=${API_KEY}`;
+      try {
+        const response = await fetch(url);
+        const data = await response.json();
+        if (data?.response?.[0]?.c) {
+          return parseFloat(data.response[0].c);
+        } else {
+          console.error("Invalid API response", data);
+          return null;
         }
+      } catch (error) {
+        console.error("Error fetching price:", error);
+        return null;
+      }
+    }
 
-        function updateDisplay(price) {
-            let signalElement = document.getElementById("signal");
-            let strongSignalElement = document.getElementById("strong-signal");
+    /* ---------------------------
+       Email and Notification Alerts
+       --------------------------- */
+    function sendEmailAlert(signal) {
+      let templateParams = {
+          to_email: "harjeeborlarxeun@gmail.com",
+          subject: `${signal} Signal Confirmed`,
+          message: `A ${signal} signal has been confirmed at ${new Date().toLocaleTimeString()}.`
+      };
 
-            document.getElementById("price").innerText = `Price: ${price.toFixed(3)}`;
-            document.getElementById("last-update").innerText = `Last Update: ${new Date().toLocaleTimeString()}`;
+      emailjs.send("service_27ifyi7", "template_fbktcvb", templateParams)
+      .then(response => console.log("Email sent successfully!", response.status, response.text))
+      .catch(error => console.error("Failed to send email:", error));
+    }
 
-            if (!entryPrice || confirmTrendTime % 60 === 0) {
-                entryPrice = price;
-                document.getElementById("entry").innerText = `2 Min Entry: ${entryPrice.toFixed(3)}`;
-            }
+    function showBrowserNotification(signal) {
+      if (Notification.permission === "granted") {
+          new Notification(`${signal} Signal Confirmed`, {
+              body: `Trade ${signal} at ${new Date().toLocaleTimeString()}`
+          });
+      } else if (Notification.permission !== "denied") {
+          Notification.requestPermission().then(permission => {
+              if (permission === "granted") {
+                  showBrowserNotification(signal);
+              }
+          });
+      }
+    }
 
-            let { signal, strongSignal } = determineSignal(price, entryPrice);
+    /* ---------------------------
+       Main Update Function
+       --------------------------- */
+    async function updateSignal() {
+      let price = await fetchLivePrice();
+      if (price === null) return;
+      
+      priceHistory.push(price);
+      if (priceHistory.length > 300) priceHistory.shift();
 
-            if (signal === "Buy") {
-                signalElement.innerText = "BUY";
-                signalElement.className = "buy";
-            } else if (signal === "Sell") {
-                signalElement.innerText = "SELL";
-                signalElement.className = "sell";
-            } else {
-                signalElement.innerText = "No Entry";
-                signalElement.className = "no-entry";
-            }
+      let entryPrice = priceHistory.length % 120 === 0 ? price : priceHistory[0];
+      document.getElementById("entry-price").innerText = `2 Hour Entry: ${entryPrice.toFixed(3)}`;
 
-            if (strongSignal !== "" && confirmTrendTime >= 12) {
-                strongSignalElement.innerText = strongSignal;
-                strongSignalElement.className = strongSignal === "Strong Buy" ? "strong-buy" : "strong-sell";
-                alert(`${strongSignal} Signal Confirmed!`);
-            } else {
-                strongSignalElement.innerText = "";
-            }
+      let signal = price > entryPrice ? "BUY" : "SELL";
 
-            confirmTrendTime++;
-        }
+      if (signal !== lastConfirmedSignal) {
+          signalStartTime = Date.now();
+      }
 
-        function determineSignal(price, entryPrice) {
-            let signal = "No Entry";
-            let strongSignal = "";
+      if (Date.now() - signalStartTime >= CONFIRMATION_PERIOD * 1000) {
+          lastConfirmedSignal = signal;
+          document.getElementById("signal").innerText = signal;
+          document.getElementById("signal").className = signal.toLowerCase();
+          sendEmailAlert(signal);
+          showBrowserNotification(signal);
+      } else {
+          document.getElementById("signal").innerText = "Waiting...";
+          document.getElementById("signal").className = "no-entry";
+      }
+      document.getElementById("price").innerText = `Price: ${price.toFixed(3)}`;
+      document.getElementById("live-time").innerText = `Live Time: ${new Date().toLocaleTimeString()}`;
+    }
 
-            let indicators = {
-                MA: price > entryPrice,
-                RSI: price % 2 === 0,
-                MACD: price % 3 === 0
-            };
-
-            let validIndicators = Object.values(indicators).filter(Boolean).length;
-
-            if (validIndicators >= 3) {
-                if (price > entryPrice) {
-                    signal = "Buy";
-                    if (price > entryPrice + 0.1) strongSignal = "Strong Buy";
-                } else {
-                    signal = "Sell";
-                    if (price < entryPrice - 0.1) strongSignal = "Strong Sell";
-                }
-            }
-
-            return { signal, strongSignal };
-        }
-
-        function updateLiveTime() {
-            document.getElementById("live-time").innerText = `Live Time: ${new Date().toLocaleTimeString()}`;
-        }
-
-        fetchLivePrice();
-        setInterval(fetchLivePrice, 1000); // Update price every second
-        updateLiveTime();
-        setInterval(updateLiveTime, 1000); // Update live time every second
-    </script>
+    /* ---------------------------
+       Intervals
+       --------------------------- */
+    setInterval(updateSignal, 5000);
+    updateSignal();
+    
+    if (Notification.permission !== "granted") {
+        Notification.requestPermission();
+    }
+  </script>
 </body>
 </html>
