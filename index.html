@@ -37,17 +37,19 @@
     <p id="live-time">Live Time: --</p>
 
     <script>
-        let apiKey = "i7IqoBCbFx3zPFLLBluhrvRvo"; // FCS API Key
+        let apiKey = "WqTj1IBXujRjakwCtFvYtmo9829VuZk"; // FCS API Key
         let entryPrice = null;
         let lastSignal = "No Entry";
 
         function fetchLivePrice() {
-            fetch(`https://fcsapi.com/api-v3/forex/latest?id=75&access_key=${apiKey}`)
+            fetch(`https://fcsapi.com/api-v3/forex/latest?symbol=CHF/JPY&access_key=${apiKey}`)
                 .then(response => response.json())
                 .then(data => {
-                    if (data && data.response && data.response[0]) {
+                    if (data.status && data.response.length > 0) {
                         let price = parseFloat(data.response[0].c);
                         updateDisplay(price);
+                    } else {
+                        console.error("Invalid API response:", data);
                     }
                 })
                 .catch(error => console.error("Error fetching data:", error));
@@ -82,7 +84,7 @@
             }
         }
 
-        setInterval(fetchLivePrice, 1000);
+        setInterval(fetchLivePrice, 1000); // Fetch data every second
     </script>
 </body>
 </html>
