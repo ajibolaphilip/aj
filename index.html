@@ -24,6 +24,16 @@
         .sell {
             color: red;
         }
+        .strong-buy {
+            color: darkgreen;
+            font-size: 20px;
+            font-weight: bold;
+        }
+        .strong-sell {
+            color: darkred;
+            font-size: 20px;
+            font-weight: bold;
+        }
         .no-entry {
             color: gray;
         }
@@ -32,59 +42,104 @@
 <body>
     <h1>CHF/JPY Signal</h1>
     <h2 id="signal" class="no-entry">Loading...</h2>
+    <p id="strong-signal"></p> <!-- Strong buy/sell message -->
     <p id="price">Price: --</p>
-    <p id="entry-price">2 Min Entry: --</p>
+    <p id="entry">2 Min Entry: --</p>
+    <p id="last-update">Last Update: --</p>
     <p id="live-time">Live Time: --</p>
 
     <script>
-        let apiKey = "cB34pqmWZUnQNj_Ygqf8"; // TradeMade API Key
+        const API_KEY = "i7IqoBCbFx3zPFLLBluhrvRvo";
+        const PAIR_ID = 57; // CHF/JPY
+
         let entryPrice = null;
-        let lastSignal = "No Entry";
+        let confirmTrendTime = 0;
 
         function fetchLivePrice() {
-            fetch(`https://api.trademade.com/forex/live?pair=CHFJPY&api_key=${apiKey}`)
+            const API_URL = `https://fcsapi.com/api-v3/forex/latest?id=${PAIR_ID}&access_key=${API_KEY}`;
+
+            fetch(API_URL)
                 .then(response => response.json())
                 .then(data => {
-                    if (data.success && data.price) {
-                        let price = parseFloat(data.price);
+                    if (data && data.response && data.response[0]) {
+                        let price = parseFloat(data.response[0].c);
                         updateDisplay(price);
                     } else {
                         console.error("Invalid API response:", data);
                     }
                 })
-                .catch(error => console.error("Error fetching data:", error));
+                .catch(error => console.error("Error fetching price:", error));
         }
 
         function updateDisplay(price) {
+            let signalElement = document.getElementById("signal");
+            let strongSignalElement = document.getElementById("strong-signal");
+
             document.getElementById("price").innerText = `Price: ${price.toFixed(3)}`;
-            document.getElementById("live-time").innerText = `Live Time: ${new Date().toLocaleTimeString()}`;
+            document.getElementById("last-update").innerText = `Last Update: ${new Date().toLocaleTimeString()}`;
 
-            if (entryPrice === null) {
-                entryPrice = price; // Set entry price initially
+            if (!entryPrice || confirmTrendTime % 60 === 0) {
+                entryPrice = price;
+                document.getElementById("entry").innerText = `2 Min Entry: ${entryPrice.toFixed(3)}`;
             }
 
-            document.getElementById("entry-price").innerText = `2 Min Entry: ${entryPrice.toFixed(3)}`;
+            let { signal, strongSignal } = determineSignal(price, entryPrice);
 
-            let signal = determineSignal(price);
-
-            if (signal !== lastSignal) {
-                document.getElementById("signal").innerText = signal;
-                document.getElementById("signal").className = signal === "BUY" ? "buy" : signal === "SELL" ? "sell" : "no-entry";
-                lastSignal = signal;
-            }
-        }
-
-        function determineSignal(price) {
-            if (price > entryPrice + 0.05) {
-                return "BUY";
-            } else if (price < entryPrice - 0.05) {
-                return "SELL";
+            if (signal === "Buy") {
+                signalElement.innerText = "BUY";
+                signalElement.className = "buy";
+            } else if (signal === "Sell") {
+                signalElement.innerText = "SELL";
+                signalElement.className = "sell";
             } else {
-                return "No Entry";
+                signalElement.innerText = "No Entry";
+                signalElement.className = "no-entry";
             }
+
+            if (strongSignal !== "" && confirmTrendTime >= 12) {
+                strongSignalElement.innerText = strongSignal;
+                strongSignalElement.className = strongSignal === "Strong Buy" ? "strong-buy" : "strong-sell";
+                alert(`${strongSignal} Signal Confirmed!`);
+            } else {
+                strongSignalElement.innerText = "";
+            }
+
+            confirmTrendTime++;
         }
 
-        setInterval(fetchLivePrice, 1000); // Fetch data every second
+        function determineSignal(price, entryPrice) {
+            let signal = "No Entry";
+            let strongSignal = "";
+
+            let indicators = {
+                MA: price > entryPrice,
+                RSI: price % 2 === 0,
+                MACD: price % 3 === 0
+            };
+
+            let validIndicators = Object.values(indicators).filter(Boolean).length;
+
+            if (validIndicators >= 3) {
+                if (price > entryPrice) {
+                    signal = "Buy";
+                    if (price > entryPrice + 0.1) strongSignal = "Strong Buy";
+                } else {
+                    signal = "Sell";
+                    if (price < entryPrice - 0.1) strongSignal = "Strong Sell";
+                }
+            }
+
+            return { signal, strongSignal };
+        }
+
+        function updateLiveTime() {
+            document.getElementById("live-time").innerText = `Live Time: ${new Date().toLocaleTimeString()}`;
+        }
+
+        fetchLivePrice();
+        setInterval(fetchLivePrice, 1000); // Update price every second
+        updateLiveTime();
+        setInterval(updateLiveTime, 1000); // Update live time every second
     </script>
 </body>
 </html>
