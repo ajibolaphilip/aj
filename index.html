@@ -43,24 +43,26 @@
     <h1>CHF/JPY Signal</h1>
     <h2 id="signal" class="no-entry">Loading...</h2>
     <p id="strong-signal"></p> <!-- Strong buy/sell message -->
-    <p id="price">CHF/JPY: --</p>
+    <p id="price">Price: --</p>
     <p id="entry">2 Min Entry: --</p>
     <p id="last-update">Last Update: --</p>
     <p id="live-time">Live Time: --</p>
 
     <script>
         const API_KEY = "i7IqoBCbFx3zPFLLBluhrvRvo";
-        const API_URL = `https://fcsapi.com/api-v3/forex/latest?id=57&access_key=${API_KEY}`; // CHF/JPY ID = 57
+        const PAIR_ID = 57; // CHF/JPY
 
-        let entryPrice = null; // Store 2-minute entry price
-        let confirmTrendTime = 0; // Track confirmation time for strong signal
+        let entryPrice = null;
+        let confirmTrendTime = 0;
 
         function fetchLivePrice() {
+            const API_URL = `https://fcsapi.com/api-v3/forex/latest?id=${PAIR_ID}&access_key=${API_KEY}`;
+
             fetch(API_URL)
                 .then(response => response.json())
                 .then(data => {
                     if (data && data.response && data.response[0]) {
-                        let price = parseFloat(data.response[0].c); // Current CHF/JPY price
+                        let price = parseFloat(data.response[0].c);
                         updateDisplay(price);
                     } else {
                         console.error("Invalid API response:", data);
@@ -73,18 +75,16 @@
             let signalElement = document.getElementById("signal");
             let strongSignalElement = document.getElementById("strong-signal");
 
-            document.getElementById("price").innerText = `CHF/JPY: ${price.toFixed(3)}`;
+            document.getElementById("price").innerText = `Price: ${price.toFixed(3)}`;
             document.getElementById("last-update").innerText = `Last Update: ${new Date().toLocaleTimeString()}`;
 
-            // Set 2-min entry price (if not set yet or every 2 min)
-            if (!entryPrice || confirmTrendTime % 24 === 0) { // 24 updates = 2 minutes (5 sec per update)
+            if (!entryPrice || confirmTrendTime % 60 === 0) {
                 entryPrice = price;
                 document.getElementById("entry").innerText = `2 Min Entry: ${entryPrice.toFixed(3)}`;
             }
 
             let { signal, strongSignal } = determineSignal(price, entryPrice);
 
-            // Update main signal
             if (signal === "Buy") {
                 signalElement.innerText = "BUY";
                 signalElement.className = "buy";
@@ -96,8 +96,7 @@
                 signalElement.className = "no-entry";
             }
 
-            // Strong buy/sell logic (only show if trend continues for 1 minute)
-            if (strongSignal !== "" && confirmTrendTime >= 12) { // 12 updates = 1 minute
+            if (strongSignal !== "" && confirmTrendTime >= 12) {
                 strongSignalElement.innerText = strongSignal;
                 strongSignalElement.className = strongSignal === "Strong Buy" ? "strong-buy" : "strong-sell";
                 alert(`${strongSignal} Signal Confirmed!`);
@@ -105,7 +104,6 @@
                 strongSignalElement.innerText = "";
             }
 
-            // Increase confirmation timer
             confirmTrendTime++;
         }
 
@@ -114,20 +112,20 @@
             let strongSignal = "";
 
             let indicators = {
-                MA: price > entryPrice, // Moving Average Trend
-                RSI: price % 2 === 0,   // Dummy RSI condition
-                MACD: price % 3 === 0   // Dummy MACD condition
+                MA: price > entryPrice,
+                RSI: price % 2 === 0,
+                MACD: price % 3 === 0
             };
 
-            let validIndicators = Object.values(indicators).filter(Boolean).length; // Count true indicators
+            let validIndicators = Object.values(indicators).filter(Boolean).length;
 
             if (validIndicators >= 3) {
                 if (price > entryPrice) {
                     signal = "Buy";
-                    if (price > entryPrice + 0.1) strongSignal = "Strong Buy"; // Adjust for real calculation
+                    if (price > entryPrice + 0.1) strongSignal = "Strong Buy";
                 } else {
                     signal = "Sell";
-                    if (price < entryPrice - 0.1) strongSignal = "Strong Sell"; // Adjust for real calculation
+                    if (price < entryPrice - 0.1) strongSignal = "Strong Sell";
                 }
             }
 
@@ -138,13 +136,10 @@
             document.getElementById("live-time").innerText = `Live Time: ${new Date().toLocaleTimeString()}`;
         }
 
-        // Fetch new price every 5 seconds
         fetchLivePrice();
-        setInterval(fetchLivePrice, 5000);
-
-        // Update live clock every second
+        setInterval(fetchLivePrice, 1000); // Update price every second
         updateLiveTime();
-        setInterval(updateLiveTime, 1000);
+        setInterval(updateLiveTime, 1000); // Update live time every second
     </script>
 </body>
 </html>
