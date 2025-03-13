@@ -75,10 +75,12 @@
             let signalElement = document.getElementById("signal");
             let strongSignalElement = document.getElementById("strong-signal");
 
+            // **Update Live Price Every Second**
             document.getElementById("price").innerText = `Price: ${price.toFixed(3)}`;
             document.getElementById("last-update").innerText = `Last Update: ${new Date().toLocaleTimeString()}`;
 
-            if (!entryPrice || confirmTrendTime % 60 === 0) {
+            // **Set Entry Price Every 2 Minutes**
+            if (!entryPrice || confirmTrendTime % 120 === 0) {
                 entryPrice = price;
                 document.getElementById("entry").innerText = `2 Min Entry: ${entryPrice.toFixed(3)}`;
             }
@@ -137,9 +139,9 @@
         }
 
         fetchLivePrice();
-        setInterval(fetchLivePrice, 1000); // Update price every second
+        setInterval(fetchLivePrice, 1000); // **Update price every second**
         updateLiveTime();
-        setInterval(updateLiveTime, 1000); // Update live time every second
+        setInterval(updateLiveTime, 1000); // **Update live time every second**
     </script>
 </body>
 </html>
