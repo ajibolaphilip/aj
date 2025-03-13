@@ -1,243 +1,141 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CHF/JPY Professional Signal</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      text-align: center;
-      padding: 20px;
-      background-color: #f4f4f4;
-    }
-    h1 {
-      font-size: 24px;
-    }
-    h2 {
-      font-size: 30px;
-      font-weight: bold;
-      margin-top: 20px;
-    }
-    .buy {
-      color: green;
-    }
-    .sell {
-      color: red;
-    }
-    .strong-buy {
-      color: darkgreen;
-      font-size: 20px;
-      font-weight: bold;
-    }
-    .strong-sell {
-      color: darkred;
-      font-size: 20px;
-      font-weight: bold;
-    }
-    .no-entry {
-      color: gray;
-    }
-    #price, #entry-price, #time, #live-time, #countdown {
-      font-size: 18px;
-      margin-top: 10px;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CHF/JPY Signal</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }
+        h1 { font-size: 24px; }
+        h2 { font-size: 30px; font-weight: bold; margin-top: 20px; }
+        .buy { color: green; }
+        .sell { color: red; }
+        .strong-buy { color: darkgreen; font-size: 20px; font-weight: bold; }
+        .strong-sell { color: darkred; font-size: 20px; font-weight: bold; }
+        .no-entry { color: gray; }
+    </style>
 </head>
 <body>
-  <h1>CHF/JPY Signal</h1>
-  <h2 id="signal" class="no-entry">Loading...</h2>
-  <p id="strong-signal"></p> <!-- Strong Buy/Sell message -->
-  <p id="price">CHF/JPY: --</p>
-  <p id="entry-price">2-Min Entry: --</p>
-  <p id="time">Last Update: --</p>
-  <p id="live-time">Live Time: --</p>
-  <p id="countdown">Next update in: 5s</p>
+    <h1>CHF/JPY Signal</h1>
+    <h2 id="signal" class="no-entry">Loading...</h2>
+    <p id="strong-signal"></p> <!-- Strong buy/sell message -->
+    <p id="price">CHF/JPY: --</p>
+    <p id="entry-price">2 Min Entry: --</p>
+    <p id="time">Last Update: --</p>
+    <p id="live-time"></p>
 
-  <script>
-    const API_KEY = "0aab98fcce05480bb37ff2132e970706"; // Your Twelve Data API key
-    const SYMBOL = "CHF/JPY";
-    const PRICE_REFRESH_INTERVAL = 1000; // update live time every second
-    const SIGNAL_REFRESH_INTERVAL = 5000;  // update signal every 5 seconds
-    const CONFIRMATION_SECONDS = 30;       // require 30 seconds of persistence
-    let lastConfirmedSignal = "No Entry";
-    let signalStartTime = 0;
-    let currentSignal = "No Entry";
+    <script>
+        const apiKey = "YOUR_TWELVE_DATA_API_KEY";  // Replace with your API Key
+        const symbol = "CHF/JPY";
+        let entryPrice = null; // Stores 2-minute entry price
+        let lastConfirmedSignal = null; // To hold previous signal
+        let confirmationStart = null; // To track confirmation time
 
-    // For the 2-min entry, fetch the last 3 1-minute candles.
-    async function fetchTimeSeries() {
-      try {
-        const url = `https://api.twelvedata.com/time_series?symbol=${SYMBOL}&interval=1min&outputsize=3&apikey=${API_KEY}`;
-        const response = await fetch(url);
-        const data = await response.json();
-        if (data && data.values) {
-          const candles = data.values.map(v => parseFloat(v.close));
-          // data.values returns newest first; we want the oldest as entry
-          return {
-            current: candles[0],
-            entry: candles[candles.length - 1]
-          };
+        async function fetchLiveData() {
+            try {
+                // Fetch real-time price and indicators
+                const priceResponse = await fetch(`https://api.twelvedata.com/quote?symbol=${symbol}&apikey=${apiKey}`);
+                const priceData = await priceResponse.json();
+                const indicatorsResponse = await fetch(`https://api.twelvedata.com/time_series?symbol=${symbol}&interval=1min&apikey=${apiKey}&outputsize=5&indicators=macd,rsi,stoch,bbands,volume`);
+                const indicatorsData = await indicatorsResponse.json();
+
+                if (!priceData.close) return;
+
+                let price = parseFloat(priceData.close);
+                document.getElementById('price').innerText = `CHF/JPY: ${price.toFixed(3)}`;
+                document.getElementById('time').innerText = `Last Update: ${new Date().toLocaleTimeString()}`;
+
+                if (!entryPrice) entryPrice = price;  // Set entry price on first update
+                document.getElementById('entry-price').innerText = `2 Min Entry: ${entryPrice.toFixed(3)}`;
+
+                let { signal, strongSignal } = determineSignal(price, indicatorsData);
+
+                updateSignal(signal, strongSignal);
+            } catch (error) {
+                console.error("Error fetching data:", error);
+            }
         }
-      } catch (error) {
-        console.error("Time series fetch error:", error);
-      }
-      return null;
-    }
 
-    // Fetch technical indicators using the quote endpoint
-    async function fetchQuote() {
-      try {
-        const url = `https://api.twelvedata.com/quote?symbol=${SYMBOL}&apikey=${API_KEY}`;
-        const response = await fetch(url);
-        const data = await response.json();
-        // Expected fields: close, rsi, macd, stochastic_k, bollinger_lower, bollinger_upper, support, resistance, volume
-        if (data && data.close) {
-          return {
-            close: parseFloat(data.close),
-            rsi: parseFloat(data.rsi),
-            macd: parseFloat(data.macd),
-            stochastic: parseFloat(data.stochastic_k),
-            bollinger_lower: parseFloat(data.bollinger_lower),
-            bollinger_upper: parseFloat(data.bollinger_upper),
-            support: parseFloat(data.support),
-            resistance: parseFloat(data.resistance),
-            volume: parseFloat(data.volume)
-          };
+        function determineSignal(price, data) {
+            let confirmations = 0;
+            let strongSignal = "";
+            
+            // Extract indicator values
+            let rsi = parseFloat(data.values[0].rsi);
+            let macd = parseFloat(data.values[0].macd);
+            let stoch = parseFloat(data.values[0].stoch_k);
+            let upperBand = parseFloat(data.values[0].bbands_upper);
+            let lowerBand = parseFloat(data.values[0].bbands_lower);
+            let volume = parseFloat(data.values[0].volume);
+            let ma = (parseFloat(data.values[0].close) + parseFloat(data.values[1].close) + parseFloat(data.values[2].close)) / 3;
+
+            // Confirm indicators
+            if (rsi < 30) confirmations++; // RSI Buy Signal
+            if (rsi > 70) confirmations++; // RSI Sell Signal
+            if (macd > 0) confirmations++; // MACD Buy Signal
+            if (macd < 0) confirmations++; // MACD Sell Signal
+            if (stoch < 20) confirmations++; // Stochastic Buy Signal
+            if (stoch > 80) confirmations++; // Stochastic Sell Signal
+            if (price < lowerBand) confirmations++; // Bollinger Buy Signal
+            if (price > upperBand) confirmations++; // Bollinger Sell Signal
+            if (volume > 1000) confirmations++; // High volume confirmation
+            if (price > ma) confirmations++; // Above Moving Average Buy Signal
+            if (price < ma) confirmations++; // Below Moving Average Sell Signal
+
+            let signal = "No Entry";
+            if (confirmations >= 3) {
+                signal = price > entryPrice ? "Buy" : "Sell";
+                if (confirmations >= 5) {
+                    strongSignal = price > entryPrice ? "Strong Buy" : "Strong Sell";
+                }
+            }
+
+            return { signal, strongSignal };
         }
-      } catch (error) {
-        console.error("Quote fetch error:", error);
-      }
-      return null;
-    }
 
-    // Combine 7 indicators to decide Buy/Sell
-    function calculateConfirmations(quote, timeSeriesData) {
-      let confirmations = 0;
-      // 1. RSI: Buy if RSI < 30, Sell if RSI > 70
-      if (quote.rsi < 30) confirmations++;
-      else if (quote.rsi > 70) confirmations--;
+        function updateSignal(signal, strongSignal) {
+            let signalElement = document.getElementById('signal');
+            let strongSignalElement = document.getElementById('strong-signal');
 
-      // 2. MACD: Buy if MACD > 0, Sell if MACD < 0
-      if (quote.macd > 0) confirmations++;
-      else if (quote.macd < 0) confirmations--;
+            if (signal !== lastConfirmedSignal) {
+                confirmationStart = new Date().getTime(); // Start confirmation timer
+                lastConfirmedSignal = signal;
+            }
 
-      // 3. Stochastic: Buy if < 20, Sell if > 80
-      if (quote.stochastic < 20) confirmations++;
-      else if (quote.stochastic > 80) confirmations--;
+            // Confirm trade only if it stays valid for 30 seconds
+            if (confirmationStart && new Date().getTime() - confirmationStart >= 30000) {
+                if (signal === "Buy") {
+                    signalElement.innerText = "BUY";
+                    signalElement.className = "buy";
+                    alert("🚀 Buy Signal Confirmed!");
+                } else if (signal === "Sell") {
+                    signalElement.innerText = "SELL";
+                    signalElement.className = "sell";
+                    alert("⚠️ Sell Signal Confirmed!");
+                } else {
+                    signalElement.innerText = "No Entry";
+                    signalElement.className = "no-entry";
+                }
 
-      // 4. Bollinger Bands: Buy if current price < lower band, Sell if > upper band
-      if (quote.close < quote.bollinger_lower) confirmations++;
-      else if (quote.close > quote.bollinger_upper) confirmations--;
-
-      // 5. Support/Resistance: If current price is near support (within 0.05) then Buy; near resistance then Sell.
-      if (Math.abs(quote.close - quote.support) < 0.05) confirmations++;
-      else if (Math.abs(quote.close - quote.resistance) < 0.05) confirmations--;
-
-      // 6. Volume: If volume is high (arbitrarily, volume > some threshold) then add confirmation.
-      // (For demo purposes, assume volume > 1000000 is high)
-      if (quote.volume > 1000000) confirmations++;
-
-      // 7. Moving Average: Calculate a simple MA from the time series entry price and current.
-      let ma = (timeSeriesData.current + timeSeriesData.entry) / 2;
-      if (quote.close > ma) confirmations++;
-      else if (quote.close < ma) confirmations--;
-
-      return confirmations;
-    }
-
-    // Determine signal based on confirmations
-    async function determineSignal() {
-      let timeSeriesData = await fetchTimeSeries();
-      let quote = await fetchQuote();
-      if (!timeSeriesData || !quote) return { signal: "No Entry", strongSignal: "", entryPrice: 0 };
-
-      let confirmations = calculateConfirmations(quote, timeSeriesData);
-      // Use confirmations: if confirmations >= 3 then overall Buy, if <= -3 then Sell.
-      let signal = "No Entry";
-      let strongSignal = "";
-      if (confirmations >= 3) {
-        signal = "Buy";
-        if (confirmations >= 5) strongSignal = "Strong Buy";
-      } else if (confirmations <= -3) {
-        signal = "Sell";
-        if (confirmations <= -5) strongSignal = "Strong Sell";
-      }
-      return { signal, strongSignal, entryPrice: timeSeriesData.entry };
-    }
-
-    async function updateSignal() {
-      const { signal, strongSignal, entryPrice } = await determineSignal();
-      const signalElement = document.getElementById("signal");
-      const strongSignalElement = document.getElementById("strong-signal");
-      const entryElement = document.getElementById("entry-price");
-
-      entryElement.innerText = `2-Min Entry: ${entryPrice.toFixed(3)}`;
-
-      let now = Date.now();
-
-      // If signal changes from last confirmed, start timer
-      if (signal !== lastConfirmedSignal) {
-        signalStartTime = now;
-      }
-      // Check if 30 seconds have passed with the new signal
-      let timePassed = (now - signalStartTime) / 1000;
-
-      if (signal !== "No Entry" && timePassed >= 30) {
-        // Confirm and update signal
-        if (signal !== lastConfirmedSignal) {
-          lastConfirmedSignal = signal;
-          alert(`Confirmed ${signal} signal at ${new Date().toLocaleTimeString()}`);
+                if (strongSignal === "Strong Buy") {
+                    strongSignalElement.innerText = "Strong Buy";
+                    strongSignalElement.className = "strong-buy";
+                } else if (strongSignal === "Strong Sell") {
+                    strongSignalElement.innerText = "Strong Sell";
+                    strongSignalElement.className = "strong-sell";
+                } else {
+                    strongSignalElement.innerText = "";
+                }
+            }
         }
-        signalElement.innerText = signal;
-        signalElement.className = signal.toLowerCase().replace(" ", "-");
-      } else {
-        signalElement.innerText = "Waiting...";
-        signalElement.className = "no-entry";
-      }
 
-      if (strongSignal) {
-        strongSignalElement.innerText = strongSignal;
-        strongSignalElement.className = strongSignal.toLowerCase().replace(" ", "-");
-      } else {
-        strongSignalElement.innerText = "";
-      }
-
-      document.getElementById("time").innerText = `Last Update: ${new Date().toLocaleTimeString()}`;
-    }
-
-    function updateLiveTime() {
-      document.getElementById("live-time").innerText = `Live Time: ${new Date().toLocaleTimeString()}`;
-    }
-
-    function startCountdown() {
-      let refreshSeconds = SIGNAL_REFRESH_INTERVAL / 1000;
-      let countdown = refreshSeconds;
-      setInterval(() => {
-        countdown--;
-        document.getElementById("countdown").innerText = `Next update in: ${countdown}s`;
-        if (countdown <= 0) {
-          countdown = refreshSeconds;
+        function updateLiveTime() {
+            document.getElementById('live-time').innerText = `Live Time: ${new Date().toLocaleTimeString()}`;
         }
-      }, 1000);
-    }
 
-    // Update price from the quote endpoint every second for live price and time
-    async function updatePriceAndTime() {
-      let quote = await fetchQuote();
-      if (quote && quote.close) {
-        document.getElementById("price").innerText = `CHF/JPY: ${quote.close.toFixed(3)}`;
-      }
-      document.getElementById("live-time").innerText = `Live Time: ${new Date().toLocaleTimeString()}`;
-    }
-
-    const SIGNAL_REFRESH_INTERVAL = 5000; // 5 seconds for signal update
-
-    // Start intervals:
-    updatePriceAndTime();
-    setInterval(updatePriceAndTime, 1000);
-    updateSignal();
-    setInterval(updateSignal, SIGNAL_REFRESH_INTERVAL);
-    startCountdown();
-  </script>
+        // Fetch new data every second & check signals every 5 seconds
+        setInterval(fetchLiveData, 5000);
+        setInterval(updateLiveTime, 1000);
+    </script>
 </body>
 </html>
