@@ -10,39 +10,19 @@
             text-align: center;
             padding: 20px;
         }
-        h1 {
-            font-size: 24px;
-        }
-        h2 {
-            font-size: 30px;
-            font-weight: bold;
-            margin-top: 20px;
-        }
-        .buy {
-            color: green;
-        }
-        .sell {
-            color: red;
-        }
-        .strong-buy {
-            color: darkgreen;
-            font-size: 20px;
-            font-weight: bold;
-        }
-        .strong-sell {
-            color: darkred;
-            font-size: 20px;
-            font-weight: bold;
-        }
-        .no-entry {
-            color: gray;
-        }
+        h1 { font-size: 24px; }
+        h2 { font-size: 30px; font-weight: bold; margin-top: 20px; }
+        .buy { color: green; }
+        .sell { color: red; }
+        .strong-buy { color: darkgreen; font-size: 20px; font-weight: bold; }
+        .strong-sell { color: darkred; font-size: 20px; font-weight: bold; }
+        .no-entry { color: gray; }
     </style>
 </head>
 <body>
     <h1>CHF/JPY Signal</h1>
     <h2 id="signal" class="no-entry">Loading...</h2>
-    <p id="strong-signal"></p> 
+    <p id="strong-signal"></p> <!-- Strong buy/sell message -->
     <p id="price">CHF/JPY: --</p>
     <p id="two-min-entry">2 Min Entry: --</p>
     <p id="last-update">Last Update: --</p>
@@ -50,85 +30,98 @@
 
     <script>
         let priceHistory = [];
-        let strongSignalTimer = null;
+        let confirmedTrend = null;
 
         async function fetchLivePrice() {
             try {
-                const response = await fetch("https://api.twelvedata.com/price?symbol=CHF/JPY&apikey=YOUR_API_KEY");
+                const response = await fetch('https://api.twelvedata.com/price?symbol=CHF/JPY&apikey=0aab98fcce05480bb37ff2132e970706');
                 const data = await response.json();
-                let price = parseFloat(data.price).toFixed(3);
+                if (!data.price) return;
 
-                let liveTime = new Date().toLocaleTimeString();
+                let price = parseFloat(data.price).toFixed(3);
+                let now = new Date();
+                let liveTime = now.toLocaleTimeString();
+
                 document.getElementById('price').innerText = "CHF/JPY: " + price;
                 document.getElementById('live-time').innerText = "Live Time: " + liveTime;
 
-                updatePriceHistory(price);
+                updatePriceHistory(price, now);
             } catch (error) {
-                console.error("Error fetching live price:", error);
+                console.error("Error fetching price:", error);
             }
         }
 
-        function updatePriceHistory(price) {
-            priceHistory.push(price);
-            if (priceHistory.length > 120) {
-                priceHistory.shift(); // Keep last 2 minutes of price data
-            }
+        function updatePriceHistory(price, timestamp) {
+            priceHistory.push({ price, timestamp });
+
+            if (priceHistory.length > 120) priceHistory.shift(); // Keep last 2 minutes of prices
         }
 
-        function checkSignal() {
-            if (priceHistory.length < 120) return;
+        function determineSignal() {
+            if (priceHistory.length < 12) return; // Wait for 1 minute of data
 
-            let currentPrice = priceHistory[priceHistory.length - 1];
-            let twoMinAgoPrice = priceHistory[0];
+            let latestPrice = priceHistory[priceHistory.length - 1].price;
+            let twoMinPrice = priceHistory[0].price;
 
-            document.getElementById('two-min-entry').innerText = "2 Min Entry: " + twoMinAgoPrice;
+            document.getElementById('two-min-entry').innerText = "2 Min Entry: " + twoMinPrice;
 
-            let signal = "No Entry";
-            let strongSignal = "";
-
-            if (currentPrice > twoMinAgoPrice) {
-                signal = "BUY";
-                if (strongSignalTimer === null) {
-                    strongSignalTimer = setTimeout(() => {
-                        strongSignal = "Strong Buy";
-                        updateUI(signal, strongSignal);
-                    }, 60000); // Wait 1 minute before confirming strong signal
-                }
-            } else if (currentPrice < twoMinAgoPrice) {
-                signal = "SELL";
-                if (strongSignalTimer === null) {
-                    strongSignalTimer = setTimeout(() => {
-                        strongSignal = "Strong Sell";
-                        updateUI(signal, strongSignal);
-                    }, 60000);
-                }
-            } else {
-                clearTimeout(strongSignalTimer);
-                strongSignalTimer = null;
-            }
-
-            updateUI(signal, strongSignal);
-        }
-
-        function updateUI(signal, strongSignal) {
             let signalElement = document.getElementById('signal');
             let strongSignalElement = document.getElementById('strong-signal');
 
-            signalElement.innerText = signal;
-            signalElement.className = signal.toLowerCase().replace(" ", "-");
+            let indicators = calculateIndicators(); 
+            let strongSignal = "";
 
-            strongSignalElement.innerText = strongSignal || "";
-            strongSignalElement.className = strongSignal.toLowerCase().replace(" ", "-");
+            if (indicators.buy >= 3) {
+                signalElement.innerText = "BUY";
+                signalElement.className = "buy";
+                if (confirmedTrend === "Buy") strongSignal = "Strong Buy";
+            } else if (indicators.sell >= 3) {
+                signalElement.innerText = "SELL";
+                signalElement.className = "sell";
+                if (confirmedTrend === "Sell") strongSignal = "Strong Sell";
+            } else {
+                signalElement.innerText = "No Entry";
+                signalElement.className = "no-entry";
+            }
+
+            strongSignalElement.innerText = strongSignal ? strongSignal : "";
 
             document.getElementById('last-update').innerText = "Last Update: " + new Date().toLocaleTimeString();
+        }
 
-            if (signal === "BUY" || signal === "SELL") {
-                alert(signal + " Signal Confirmed!");
+        function calculateIndicators() {
+            let latestPrice = priceHistory[priceHistory.length - 1].price;
+            let previousPrice = priceHistory[priceHistory.length - 2]?.price || latestPrice;
+
+            let buyCount = 0;
+            let sellCount = 0;
+
+            if (latestPrice > previousPrice) buyCount++; else sellCount++;
+            if (latestPrice > priceHistory[Math.max(0, priceHistory.length - 6)].price) buyCount++; else sellCount++;
+            if (latestPrice > priceHistory[0].price) buyCount++; else sellCount++;
+
+            return { buy: buyCount, sell: sellCount };
+        }
+
+        function checkTrendConfirmation() {
+            if (priceHistory.length < 60) return; // Wait for 1 minute of data
+
+            let recentPrices = priceHistory.slice(-60); // Last 1 minute of prices
+            let startPrice = recentPrices[0].price;
+            let endPrice = recentPrices[recentPrices.length - 1].price;
+
+            if (endPrice > startPrice) {
+                confirmedTrend = "Buy";
+            } else if (endPrice < startPrice) {
+                confirmedTrend = "Sell";
+            } else {
+                confirmedTrend = null;
             }
         }
 
         setInterval(fetchLivePrice, 1000); // Update price every second
-        setInterval(checkSignal, 5000); // Update signal every 5 seconds
+        setInterval(determineSignal, 5000); // Update signal every 5 seconds
+        setInterval(checkTrendConfirmation, 5000); // Check trend confirmation every 5 seconds
     </script>
 </body>
 </html>
