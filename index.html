@@ -5,137 +5,130 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CHF/JPY Signal</title>
     <style>
-        body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }
-        h1 { font-size: 24px; }
-        h2 { font-size: 30px; font-weight: bold; margin-top: 20px; }
-        .buy { color: green; }
-        .sell { color: red; }
-        .strong-buy { color: darkgreen; font-size: 20px; font-weight: bold; }
-        .strong-sell { color: darkred; font-size: 20px; font-weight: bold; }
-        .no-entry { color: gray; }
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 20px;
+        }
+        h1 {
+            font-size: 24px;
+        }
+        h2 {
+            font-size: 30px;
+            font-weight: bold;
+            margin-top: 20px;
+        }
+        .buy {
+            color: green;
+        }
+        .sell {
+            color: red;
+        }
+        .strong-buy {
+            color: darkgreen;
+            font-size: 20px;
+            font-weight: bold;
+        }
+        .strong-sell {
+            color: darkred;
+            font-size: 20px;
+            font-weight: bold;
+        }
+        .no-entry {
+            color: gray;
+        }
     </style>
 </head>
 <body>
     <h1>CHF/JPY Signal</h1>
     <h2 id="signal" class="no-entry">Loading...</h2>
-    <p id="strong-signal"></p> <!-- Strong buy/sell message -->
+    <p id="strong-signal"></p> 
     <p id="price">CHF/JPY: --</p>
-    <p id="entry-price">2 Min Entry: --</p>
-    <p id="time">Last Update: --</p>
-    <p id="live-time"></p>
+    <p id="two-min-entry">2 Min Entry: --</p>
+    <p id="last-update">Last Update: --</p>
+    <p id="live-time">Live Time: --</p>
 
     <script>
-        const apiKey = "0aab98fcce05480bb37ff2132e970706";  // Replace with your API Key
-        const symbol = "CHF/JPY";
-        let entryPrice = null; // Stores 2-minute entry price
-        let lastConfirmedSignal = null; // To hold previous signal
-        let confirmationStart = null; // To track confirmation time
+        let priceHistory = [];
+        let strongSignalTimer = null;
 
-        async function fetchLiveData() {
+        async function fetchLivePrice() {
             try {
-                // Fetch real-time price and indicators
-                const priceResponse = await fetch(`https://api.twelvedata.com/quote?symbol=${symbol}&apikey=${apiKey}`);
-                const priceData = await priceResponse.json();
-                const indicatorsResponse = await fetch(`https://api.twelvedata.com/time_series?symbol=${symbol}&interval=1min&apikey=${apiKey}&outputsize=5&indicators=macd,rsi,stoch,bbands,volume`);
-                const indicatorsData = await indicatorsResponse.json();
+                const response = await fetch("https://api.twelvedata.com/price?symbol=CHF/JPY&apikey=YOUR_API_KEY");
+                const data = await response.json();
+                let price = parseFloat(data.price).toFixed(3);
 
-                if (!priceData.close) return;
+                let liveTime = new Date().toLocaleTimeString();
+                document.getElementById('price').innerText = "CHF/JPY: " + price;
+                document.getElementById('live-time').innerText = "Live Time: " + liveTime;
 
-                let price = parseFloat(priceData.close);
-                document.getElementById('price').innerText = `CHF/JPY: ${price.toFixed(3)}`;
-                document.getElementById('time').innerText = `Last Update: ${new Date().toLocaleTimeString()}`;
-
-                if (!entryPrice) entryPrice = price;  // Set entry price on first update
-                document.getElementById('entry-price').innerText = `2 Min Entry: ${entryPrice.toFixed(3)}`;
-
-                let { signal, strongSignal } = determineSignal(price, indicatorsData);
-
-                updateSignal(signal, strongSignal);
+                updatePriceHistory(price);
             } catch (error) {
-                console.error("Error fetching data:", error);
+                console.error("Error fetching live price:", error);
             }
         }
 
-        function determineSignal(price, data) {
-            let confirmations = 0;
-            let strongSignal = "";
-            
-            // Extract indicator values
-            let rsi = parseFloat(data.values[0].rsi);
-            let macd = parseFloat(data.values[0].macd);
-            let stoch = parseFloat(data.values[0].stoch_k);
-            let upperBand = parseFloat(data.values[0].bbands_upper);
-            let lowerBand = parseFloat(data.values[0].bbands_lower);
-            let volume = parseFloat(data.values[0].volume);
-            let ma = (parseFloat(data.values[0].close) + parseFloat(data.values[1].close) + parseFloat(data.values[2].close)) / 3;
+        function updatePriceHistory(price) {
+            priceHistory.push(price);
+            if (priceHistory.length > 120) {
+                priceHistory.shift(); // Keep last 2 minutes of price data
+            }
+        }
 
-            // Confirm indicators
-            if (rsi < 30) confirmations++; // RSI Buy Signal
-            if (rsi > 70) confirmations++; // RSI Sell Signal
-            if (macd > 0) confirmations++; // MACD Buy Signal
-            if (macd < 0) confirmations++; // MACD Sell Signal
-            if (stoch < 20) confirmations++; // Stochastic Buy Signal
-            if (stoch > 80) confirmations++; // Stochastic Sell Signal
-            if (price < lowerBand) confirmations++; // Bollinger Buy Signal
-            if (price > upperBand) confirmations++; // Bollinger Sell Signal
-            if (volume > 1000) confirmations++; // High volume confirmation
-            if (price > ma) confirmations++; // Above Moving Average Buy Signal
-            if (price < ma) confirmations++; // Below Moving Average Sell Signal
+        function checkSignal() {
+            if (priceHistory.length < 120) return;
+
+            let currentPrice = priceHistory[priceHistory.length - 1];
+            let twoMinAgoPrice = priceHistory[0];
+
+            document.getElementById('two-min-entry').innerText = "2 Min Entry: " + twoMinAgoPrice;
 
             let signal = "No Entry";
-            if (confirmations >= 3) {
-                signal = price > entryPrice ? "Buy" : "Sell";
-                if (confirmations >= 5) {
-                    strongSignal = price > entryPrice ? "Strong Buy" : "Strong Sell";
+            let strongSignal = "";
+
+            if (currentPrice > twoMinAgoPrice) {
+                signal = "BUY";
+                if (strongSignalTimer === null) {
+                    strongSignalTimer = setTimeout(() => {
+                        strongSignal = "Strong Buy";
+                        updateUI(signal, strongSignal);
+                    }, 60000); // Wait 1 minute before confirming strong signal
                 }
+            } else if (currentPrice < twoMinAgoPrice) {
+                signal = "SELL";
+                if (strongSignalTimer === null) {
+                    strongSignalTimer = setTimeout(() => {
+                        strongSignal = "Strong Sell";
+                        updateUI(signal, strongSignal);
+                    }, 60000);
+                }
+            } else {
+                clearTimeout(strongSignalTimer);
+                strongSignalTimer = null;
             }
 
-            return { signal, strongSignal };
+            updateUI(signal, strongSignal);
         }
 
-        function updateSignal(signal, strongSignal) {
+        function updateUI(signal, strongSignal) {
             let signalElement = document.getElementById('signal');
             let strongSignalElement = document.getElementById('strong-signal');
 
-            if (signal !== lastConfirmedSignal) {
-                confirmationStart = new Date().getTime(); // Start confirmation timer
-                lastConfirmedSignal = signal;
-            }
+            signalElement.innerText = signal;
+            signalElement.className = signal.toLowerCase().replace(" ", "-");
 
-            // Confirm trade only if it stays valid for 30 seconds
-            if (confirmationStart && new Date().getTime() - confirmationStart >= 30000) {
-                if (signal === "Buy") {
-                    signalElement.innerText = "BUY";
-                    signalElement.className = "buy";
-                    alert("🚀 Buy Signal Confirmed!");
-                } else if (signal === "Sell") {
-                    signalElement.innerText = "SELL";
-                    signalElement.className = "sell";
-                    alert("⚠️ Sell Signal Confirmed!");
-                } else {
-                    signalElement.innerText = "No Entry";
-                    signalElement.className = "no-entry";
-                }
+            strongSignalElement.innerText = strongSignal || "";
+            strongSignalElement.className = strongSignal.toLowerCase().replace(" ", "-");
 
-                if (strongSignal === "Strong Buy") {
-                    strongSignalElement.innerText = "Strong Buy";
-                    strongSignalElement.className = "strong-buy";
-                } else if (strongSignal === "Strong Sell") {
-                    strongSignalElement.innerText = "Strong Sell";
-                    strongSignalElement.className = "strong-sell";
-                } else {
-                    strongSignalElement.innerText = "";
-                }
+            document.getElementById('last-update').innerText = "Last Update: " + new Date().toLocaleTimeString();
+
+            if (signal === "BUY" || signal === "SELL") {
+                alert(signal + " Signal Confirmed!");
             }
         }
 
-        function updateLiveTime() {
-            document.getElementById('live-time').innerText = `Live Time: ${new Date().toLocaleTimeString()}`;
-        }
-
-        // Fetch new data every second & check signals every 5 seconds
-        setInterval(fetchLiveData, 5000);
-        setInterval(updateLiveTime, 1000);
+        setInterval(fetchLivePrice, 1000); // Update price every second
+        setInterval(checkSignal, 5000); // Update signal every 5 seconds
     </script>
 </body>
 </html>
